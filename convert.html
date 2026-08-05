@@ -30,24 +30,27 @@
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
+            box-sizing: border-box;
         }
         button {
             width: 100%;
             padding: 12px;
-            background-color: #007bff;
+            background-color: #0056b3;
             color: white;
             border: none;
             border-radius: 4px;
             font-size: 1rem;
             cursor: pointer;
+            font-weight: bold;
         }
         button:hover {
-            background-color: #0056b3;
+            background-color: #004494;
         }
         .status {
             margin-top: 10px;
             font-size: 0.9rem;
             color: #555;
+            min-height: 20px;
         }
     </style>
 </head>
@@ -70,9 +73,8 @@
     </div>
 
     <script>
-        // REPLACE WITH YOUR ACTUAL API KEY AND ENDPOINT
-        const API_KEY = 'YOUR_API_KEY_HERE'; 
-        const API_ENDPOINT = 'https://api.your-chosen-converter.com/v1/convert';
+        // REPLACE THIS WITH YOUR ACTUAL API KEY FROM PDF.CO
+        const API_KEY = 'YOUR_ACTUAL_API_KEY'; 
 
         // ==========================================
         // LOGIC 1: PDF to Word Conversion
@@ -87,28 +89,40 @@
             }
 
             const file = fileInput.files[0];
-            statusDiv.innerText = `Uploading and processing ${file.name}...`;
+            statusDiv.innerText = `Uploading and processing ${file.name}... this may take a moment.`;
 
             try {
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('format', 'docx'); // Target format
+                const tokenHeader = { 'x-api-key': API_KEY };
+                
+                // Step A: Get presigned URL
+                let response = await fetch(`https://api.pdf.co/v1/file/upload/get-presigned-url?name=${encodeURIComponent(file.name)}`, { headers: tokenHeader });
+                let data = await response.json();
+                if (data.error) throw new Error(data.message);
+                const presignedUrl = data.presignedUrl;
+                const uploadedFileUrl = data.url;
 
-                const response = await fetch(API_ENDPOINT, {
+                // Step B: Upload file
+                await fetch(presignedUrl, { method: 'PUT', body: file });
+
+                // Step C: Convert to DOCX
+                const convertRes = await fetch('https://api.pdf.co/v1/pdf/convert/to/doc', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${API_KEY}` },
-                    body: formData
+                    headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+                    body: JSON.stringify({ 
+                        url: uploadedFileUrl, 
+                        name: file.name.replace(/\.pdf$/i, '.docx') 
+                    })
                 });
+                const convertData = await convertRes.json();
+                if (convertData.error) throw new Error(convertData.message);
 
-                if (!response.ok) throw new Error('Conversion failed.');
-
-                const blob = await response.blob();
-                downloadFile(blob, file.name.replace('.pdf', '.docx'));
-                statusDiv.innerText = "Conversion successful!";
+                // Step D: Download Export
+                window.location.href = convertData.url;
+                statusDiv.innerText = "Conversion successful! Download starting...";
                 
             } catch (error) {
                 console.error("PDF to Word Error:", error);
-                statusDiv.innerText = "Error during conversion. Check console.";
+                statusDiv.innerText = `Error: ${error.message}. Check console or API Key.`;
             }
         }
 
@@ -125,43 +139,41 @@
             }
 
             const file = fileInput.files[0];
-            statusDiv.innerText = `Uploading and processing ${file.name}...`;
+            statusDiv.innerText = `Uploading and processing ${file.name}... this may take a moment.`;
 
             try {
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('format', 'pdf'); // Target format
+                const tokenHeader = { 'x-api-key': API_KEY };
+                
+                // Step A: Get presigned URL
+                let response = await fetch(`https://api.pdf.co/v1/file/upload/get-presigned-url?name=${encodeURIComponent(file.name)}`, { headers: tokenHeader });
+                let data = await response.json();
+                if (data.error) throw new Error(data.message);
+                const presignedUrl = data.presignedUrl;
+                const uploadedFileUrl = data.url;
 
-                const response = await fetch(API_ENDPOINT, {
+                // Step B: Upload file
+                await fetch(presignedUrl, { method: 'PUT', body: file });
+
+                // Step C: Convert to PDF
+                const convertRes = await fetch('https://api.pdf.co/v1/pdf/convert/from/doc', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${API_KEY}` },
-                    body: formData
+                    headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+                    body: JSON.stringify({ 
+                        url: uploadedFileUrl, 
+                        name: file.name.replace(/\.docx?$/i, '.pdf') 
+                    })
                 });
+                const convertData = await convertRes.json();
+                if (convertData.error) throw new Error(convertData.message);
 
-                if (!response.ok) throw new Error('Conversion failed.');
-
-                const blob = await response.blob();
-                downloadFile(blob, file.name.replace(/\.docx?$/, '.pdf'));
-                statusDiv.innerText = "Conversion successful!";
+                // Step D: Download Export
+                window.location.href = convertData.url;
+                statusDiv.innerText = "Conversion successful! Download starting...";
                 
             } catch (error) {
                 console.error("Word to PDF Error:", error);
-                statusDiv.innerText = "Error during conversion. Check console.";
+                statusDiv.innerText = `Error: ${error.message}. Check console or API Key.`;
             }
-        }
-
-        // ==========================================
-        // UTILITY: Handle File Downloads
-        // ==========================================
-        function downloadFile(blob, filename) {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
         }
     </script>
 </body>
