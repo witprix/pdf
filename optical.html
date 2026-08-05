@@ -3,93 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optical Transfer (QR Code)</title>
+    <title>Optical File Transfer (Animated QR)</title>
     
-    <!-- Library for generating QR Codes -->
+    <!-- QR Code Generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    
-    <!-- Library for scanning QR Codes -->
+    <!-- QR Code Scanning -->
     <script src="https://unpkg.com/html5-qrcode"></script>
 
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f9f9f9;
-            color: #333;
-        }
-        h1 {
-            text-align: center;
-        }
-        .container {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        @media (min-width: 600px) {
-            .container {
-                flex-direction: row;
-            }
-        }
-        .card {
-            flex: 1;
-            background: #fff;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        input[type="text"] {
-            width: 95%;
-            padding: 12px;
-            margin-bottom: 15px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-        }
-        button {
-            padding: 10px 15px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-right: 10px;
-            margin-bottom: 10px;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        #qrcode-container {
-            display: flex;
-            justify-content: center;
-            margin-top: 20px;
-        }
-        #reader {
-            width: 100%;
-            margin-top: 15px;
-        }
-        .result-box {
-            margin-top: 15px;
-            padding: 10px;
-            background-color: #e9ecef;
-            border-radius: 6px;
-            word-wrap: break-word;
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f4f7f6; color: #333; }
+        h1 { text-align: center; }
+        .container { display: flex; flex-direction: column; gap: 20px; }
+        @media (min-width: 768px) { .container { flex-direction: row; } }
+        .card { flex: 1; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .btn { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-bottom: 10px; }
+        .btn:hover { background-color: #0056b3; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-danger:hover { background-color: #c82333; }
+        #qrcode-container { display: flex; justify-content: center; margin-top: 20px; min-height: 256px;}
+        .status { font-weight: bold; margin-top: 10px; color: #d9534f; text-align: center; }
+        #reader { width: 100%; margin-top: 15px; }
+        .progress-bar { width: 100%; background-color: #e0e0e0; border-radius: 4px; margin-top: 10px; overflow: hidden; display: none; }
+        .progress-fill { height: 20px; background-color: #28a745; width: 0%; transition: width 0.2s; }
     </style>
 </head>
 <body>
 
-    <h1>Optical Transfer Hub</h1>
+    <h1>Multi-Frame Optical Transfer</h1>
 
     <div class="container">
         <!-- SENDER SECTION -->
         <div class="card">
-            <h2>Send Data (Generate QR)</h2>
-            <p>Enter text, Wi-Fi credentials, or contact info to share visually.</p>
-            <input type="text" id="dataInput" placeholder="e.g., MySecretPassword123" />
-            <button onclick="generateQR()">Generate QR Code</button>
+            <h2>Broadcast File</h2>
+            <p>Select a small file to broadcast as an animated sequence of QR codes.</p>
+            <input type="file" id="fileInput" style="margin-bottom: 15px;" />
+            <br>
+            <button class="btn" onclick="startBroadcast()">Start Broadcast</button>
+            <button class="btn btn-danger" onclick="stopBroadcast()">Stop</button>
+            
+            <div id="broadcastStatus" class="status"></div>
             <div id="qrcode-container">
                 <div id="qrcode"></div>
             </div>
@@ -97,84 +49,166 @@
 
         <!-- RECEIVER SECTION -->
         <div class="card">
-            <h2>Receive Data (Scan QR)</h2>
-            <p>Use your camera to scan a generated QR code from another screen.</p>
-            <button onclick="startScanner()">Start Camera</button>
-            <button onclick="stopScanner()" style="background-color: #dc3545;">Stop Camera</button>
+            <h2>Receive File</h2>
+            <p>Scan the animated QR codes to reconstruct the file.</p>
+            <button class="btn" onclick="startScanner()">Start Scanner</button>
+            <button class="btn btn-danger" onclick="stopScanner()">Stop Scanner</button>
             
             <div id="reader"></div>
             
-            <div class="result-box">
-                <strong>Scanned Data:</strong>
-                <p id="scanResult">Waiting for scan...</p>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div id="receiveStatus" class="status">Waiting for frames...</div>
+            
+            <div id="downloadArea" style="margin-top: 15px; display: none;">
+                <strong>Transfer Complete!</strong><br>
+                <a id="downloadLink" class="btn" style="display: inline-block; margin-top: 10px; text-decoration: none;" download="received_file">Download File</a>
             </div>
         </div>
     </div>
 
     <script>
-        // --- QR Code Generation Logic ---
+        // --- SENDER LOGIC ---
+        const CHUNK_SIZE = 150; // Bytes per frame. Keep low for reliable scanning.
+        const FPS = 3; // Frames per second
+        let frames = [];
+        let currentFrameIdx = 0;
+        let broadcastInterval = null;
         let qrCodeInstance = null;
 
-        function generateQR() {
-            const data = document.getElementById("dataInput").value;
-            const qrContainer = document.getElementById("qrcode");
-            
-            if (!data) {
-                alert("Please enter some data to transfer.");
+        function startBroadcast() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files.length) {
+                alert("Please select a file first.");
                 return;
             }
 
-            // Clear previous QR code
-            qrContainer.innerHTML = "";
-            
-            // Generate new QR code
-            qrCodeInstance = new QRCode(qrContainer, {
-                text: data,
-                width: 256,
-                height: 256,
-                colorDark : "#000000",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.M
-            });
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            // Read file as Data URL (Base64) to preserve file type for the receiver
+            reader.onload = function(e) {
+                const dataUrl = e.target.result;
+                generateFrames(dataUrl);
+                playBroadcast();
+            };
+            reader.readAsDataURL(file);
         }
 
-        // --- QR Code Scanning Logic ---
+        function generateFrames(data) {
+            frames = [];
+            const totalChunks = Math.ceil(data.length / CHUNK_SIZE);
+            
+            for (let i = 0; i < totalChunks; i++) {
+                const chunk = data.substr(i * CHUNK_SIZE, CHUNK_SIZE);
+                // Format: index|total|data
+                frames.push(`${i}|${totalChunks}|${chunk}`);
+            }
+            document.getElementById('broadcastStatus').innerText = `Broadcasting ${totalChunks} frames...`;
+        }
+
+        function playBroadcast() {
+            if (broadcastInterval) clearInterval(broadcastInterval);
+            
+            const qrContainer = document.getElementById("qrcode");
+            qrContainer.innerHTML = ""; // clear previous
+            
+            qrCodeInstance = new QRCode(qrContainer, {
+                width: 256,
+                height: 256,
+                correctLevel : QRCode.CorrectLevel.L // Low correction allows more data capacity per frame
+            });
+
+            currentFrameIdx = 0;
+            broadcastInterval = setInterval(() => {
+                qrCodeInstance.makeCode(frames[currentFrameIdx]);
+                currentFrameIdx = (currentFrameIdx + 1) % frames.length; // Loop back to start
+            }, 1000 / FPS);
+        }
+
+        function stopBroadcast() {
+            if (broadcastInterval) clearInterval(broadcastInterval);
+            document.getElementById('broadcastStatus').innerText = "Broadcast stopped.";
+        }
+
+        // --- RECEIVER LOGIC ---
         let html5QrcodeScanner = null;
+        let receivedFrames = {};
+        let totalFramesExpected = 0;
 
         function startScanner() {
-            if (html5QrcodeScanner) {
-                console.warn("Scanner is already running.");
-                return;
-            }
+            if (html5QrcodeScanner) return;
+
+            receivedFrames = {};
+            totalFramesExpected = 0;
+            document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('downloadArea').style.display = 'none';
+            document.getElementById('receiveStatus').innerText = "Scanning...";
 
             html5QrcodeScanner = new Html5Qrcode("reader");
             
-            const qrCodeSuccessCallback = (decodedText, decodedResult) => {
-                // Display the scanned result
-                document.getElementById("scanResult").innerText = decodedText;
-                
-                // Optionally stop scanning after a successful read
-                stopScanner();
-            };
-            
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
             
-            // Start the rear camera by default
-            html5QrcodeScanner.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
-            .catch((err) => {
-                alert("Error accessing camera. Please ensure permissions are granted.");
-                console.error(err);
-            });
+            html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess)
+            .catch(err => console.error(err));
+        }
+
+        function onScanSuccess(decodedText) {
+            // Parse the frame format: index|total|data
+            const match = decodedText.match(/^(\d+)\|(\d+)\|(.*)$/);
+            if (!match) return; // Ignore if not a valid frame
+
+            const index = parseInt(match[1], 10);
+            const total = parseInt(match[2], 10);
+            const data = match[3];
+
+            if (totalFramesExpected === 0) {
+                totalFramesExpected = total;
+            }
+
+            // Save unique frame
+            if (!receivedFrames[index]) {
+                receivedFrames[index] = data;
+                updateProgress();
+            }
+
+            // Check if transfer is complete
+            if (Object.keys(receivedFrames).length === totalFramesExpected) {
+                finalizeTransfer();
+            }
+        }
+
+        function updateProgress() {
+            const receivedCount = Object.keys(receivedFrames).length;
+            const percentage = (receivedCount / totalFramesExpected) * 100;
+            document.getElementById('progressFill').style.width = percentage + '%';
+            document.getElementById('receiveStatus').innerText = `Received ${receivedCount} / ${totalFramesExpected} frames`;
+        }
+
+        function finalizeTransfer() {
+            stopScanner();
+            document.getElementById('receiveStatus').innerText = "File successfully reconstructed!";
+            
+            // Reassemble chunks
+            let fullDataUrl = "";
+            for (let i = 0; i < totalFramesExpected; i++) {
+                fullDataUrl += receivedFrames[i];
+            }
+
+            // Prepare download link
+            const downloadLink = document.getElementById('downloadLink');
+            downloadLink.href = fullDataUrl;
+            document.getElementById('downloadArea').style.display = 'block';
         }
 
         function stopScanner() {
             if (html5QrcodeScanner) {
-                html5QrcodeScanner.stop().then((ignore) => {
+                html5QrcodeScanner.stop().then(() => {
                     html5QrcodeScanner.clear();
                     html5QrcodeScanner = null;
-                }).catch((err) => {
-                    console.error("Failed to stop scanner.", err);
-                });
+                }).catch(err => console.error(err));
             }
         }
     </script>
