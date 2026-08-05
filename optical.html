@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optical File Transfer (Debug Mode)</title>
+    <title>Universal Optical Transfer</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -18,34 +18,27 @@
         .btn:hover { background-color: #0056b3; }
         .btn-danger { background-color: #dc3545; }
         .btn-warning { background-color: #ffc107; color: #000; }
+        .btn-success { background-color: #28a745; }
         
-        /* CRITICAL FIX: The Quiet Zone */
         #qrcode-container { 
-            display: flex; 
-            justify-content: center; 
-            align-items: center;
-            margin-top: 20px; 
-            min-height: 300px;
-            background-color: #eee;
-            border-radius: 8px;
+            display: flex; justify-content: center; align-items: center;
+            margin-top: 20px; min-height: 300px; background-color: #eee; border-radius: 8px;
         }
-        #qrcode {
-            /* Scanners REQUIRE a white border to recognize the corners */
-            padding: 20px;
-            background-color: white; 
-            border: 2px solid #ccc;
-        }
+        #qrcode { padding: 20px; background-color: white; border: 2px solid #ccc; }
         
         .status { font-weight: bold; margin-top: 10px; text-align: center; }
         #reader { width: 100%; margin-top: 15px; }
         .progress-bar { width: 100%; background-color: #e0e0e0; border-radius: 4px; margin-top: 10px; overflow: hidden; display: none; }
         .progress-fill { height: 20px; background-color: #28a745; width: 0%; transition: width 0.2s; }
         .debug-log { background: #333; color: #0f0; padding: 10px; font-family: monospace; font-size: 12px; height: 100px; overflow-y: auto; margin-top: 15px; border-radius: 4px;}
+        
+        /* Universal output styling */
+        textarea.universal-output { width: 100%; height: 80px; margin-top: 10px; padding: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; resize: none; }
     </style>
 </head>
 <body>
 
-    <h1>Optical Transfer (Diagnostic Mode)</h1>
+    <h1>Universal Optical Transfer</h1>
 
     <div class="container">
         <!-- SENDER SECTION -->
@@ -55,7 +48,7 @@
             <br>
             <button class="btn" onclick="startBroadcast()">Auto-Play</button>
             <button class="btn btn-warning" onclick="pauseBroadcast()">Pause</button>
-            <button class="btn" onclick="nextFrame()">Next Frame (Manual)</button>
+            <button class="btn" onclick="nextFrame()">Next Frame</button>
             
             <div id="broadcastStatus" class="status" style="color: #007bff;"></div>
             <div id="qrcode-container">
@@ -65,7 +58,7 @@
 
         <!-- RECEIVER SECTION -->
         <div class="card">
-            <h2>2. Receive File</h2>
+            <h2>2. Receive Data</h2>
             <button class="btn" onclick="startScanner()">Start Scanner</button>
             <button class="btn btn-danger" onclick="stopScanner()">Stop</button>
             
@@ -79,7 +72,7 @@
             <div class="debug-log" id="debugLog">System Ready...<br></div>
 
             <div id="downloadArea" style="margin-top: 15px; display: none;">
-                <a id="downloadLink" class="btn" style="display: inline-block; text-decoration: none;" download="received_file">Download Reconstructed File</a>
+                <!-- Dynamic Content goes here (File Download OR Text View) -->
             </div>
         </div>
     </div>
@@ -91,8 +84,8 @@
         }
 
         // --- SENDER LOGIC ---
-        const CHUNK_SIZE = 40; // Extremely small chunks to guarantee easy scanning
-        const FPS = 1.5; // Very slow frame rate
+        const CHUNK_SIZE = 40; 
+        const FPS = 1.5; 
         let frames = [];
         let currentFrameIdx = 0;
         let broadcastInterval = null;
@@ -114,7 +107,7 @@
                 };
                 reader.readAsDataURL(file);
             } else {
-                playLoop(); // Resume if already generated
+                playLoop(); 
             }
         }
 
@@ -123,33 +116,30 @@
             const totalChunks = Math.ceil(data.length / CHUNK_SIZE);
             for (let i = 0; i < totalChunks; i++) {
                 const chunk = data.substr(i * CHUNK_SIZE, CHUNK_SIZE);
-                frames.push(`${i}|${totalChunks}|${chunk}`);
+                // Prefix identifies it as our app's file format
+                frames.push(`FILE_CHUNK|${i}|${totalChunks}|${chunk}`);
             }
             logDebug(`Generated ${totalChunks} frames.`);
             
             const qrContainer = document.getElementById("qrcode");
             qrContainer.innerHTML = ""; 
             qrCodeInstance = new QRCode(qrContainer, {
-                width: 250,
-                height: 250,
-                colorDark : "#000000",
-                colorLight : "#ffffff",
+                width: 250, height: 250,
+                colorDark : "#000000", colorLight : "#ffffff",
                 correctLevel : QRCode.CorrectLevel.L
             });
         }
 
         function playLoop() {
-            pauseBroadcast(); // Clear any existing interval
+            pauseBroadcast(); 
             document.getElementById('broadcastStatus').innerText = "Broadcasting (Auto)...";
             renderCurrentFrame();
-            broadcastInterval = setInterval(() => {
-                nextFrame();
-            }, 1000 / FPS);
+            broadcastInterval = setInterval(() => { nextFrame(); }, 1000 / FPS);
         }
 
         function pauseBroadcast() {
             if (broadcastInterval) clearInterval(broadcastInterval);
-            document.getElementById('broadcastStatus').innerText = "Broadcast Paused (Manual Mode)";
+            document.getElementById('broadcastStatus').innerText = "Broadcast Paused";
         }
 
         function nextFrame() {
@@ -172,24 +162,19 @@
             receivedFrames = {};
             totalFramesExpected = 0;
             document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('progressFill').style.width = '0%';
             document.getElementById('downloadArea').style.display = 'none';
             document.getElementById('receiveStatus').innerText = "Initializing Camera...";
 
             html5QrcodeScanner = new Html5Qrcode("reader");
             
-            // HYPER-OPTIMIZATION: Only look for QR codes, ignore all other barcode types.
-            const config = { 
-                fps: 10, 
-                qrbox: { width: 250, height: 250 },
-                formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ] 
-            };
+            // Allow all barcode formats (removed the strict QR only restriction)
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
             
-            html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess, (err) => {
-                // Background scan failures (happens every frame a QR isn't found)
-            })
+            html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess, (err) => {})
             .then(() => {
-                document.getElementById('receiveStatus').innerText = "Scanning Active. Point at QR code.";
-                logDebug("Camera started successfully.");
+                document.getElementById('receiveStatus').innerText = "Scanning Active. Point at any code.";
+                logDebug("Camera started.");
             })
             .catch(err => {
                 document.getElementById('receiveStatus').innerText = "Camera Error! Check console.";
@@ -198,26 +183,53 @@
         }
 
         function onScanSuccess(decodedText) {
-            const match = decodedText.match(/^(\d+)\|(\d+)\|(.*)$/);
-            if (!match) {
-                logDebug("Read invalid QR format. Ignoring.");
-                return;
-            }
+            // Check if it's an animated file frame (matches our prefix)
+            const match = decodedText.match(/^FILE_CHUNK\|(\d+)\|(\d+)\|(.*)$/);
+            
+            if (match) {
+                // --- HANDLE FILE FRAME MAPPING ---
+                const index = parseInt(match[1], 10);
+                const total = parseInt(match[2], 10);
+                const data = match[3];
 
-            const index = parseInt(match[1], 10);
-            const total = parseInt(match[2], 10);
-            const data = match[3];
+                if (totalFramesExpected === 0) {
+                    totalFramesExpected = total;
+                    logDebug(`Incoming file detected: ${total} frames.`);
+                }
 
-            if (totalFramesExpected === 0) totalFramesExpected = total;
+                if (!receivedFrames[index]) {
+                    receivedFrames[index] = data;
+                    logDebug(`+ Scanned Frame [${index + 1}/${total}]`);
+                    updateProgress();
+                }
 
-            if (!receivedFrames[index]) {
-                receivedFrames[index] = data;
-                logDebug(`+ Scanned Frame [${index + 1}/${total}]`);
-                updateProgress();
-            }
+                if (Object.keys(receivedFrames).length === totalFramesExpected) {
+                    finalizeFileTransfer();
+                }
 
-            if (Object.keys(receivedFrames).length === totalFramesExpected) {
-                finalizeTransfer();
+            } else {
+                // --- HANDLE STANDARD QR CODE (URL, Text, etc.) ---
+                logDebug("Standard barcode/QR code scanned.");
+                
+                // Pause scanner so it doesn't keep rapidly firing on the same static code
+                html5QrcodeScanner.pause(true); 
+                document.getElementById('receiveStatus').innerText = "Standard Data Detected!";
+                
+                const downloadArea = document.getElementById('downloadArea');
+                
+                // Check if it looks like a URL
+                const isUrl = decodedText.startsWith('http://') || decodedText.startsWith('https://');
+                let actionButton = isUrl 
+                    ? `<a href="${decodedText}" target="_blank" class="btn btn-success" style="text-decoration:none;">Open Link</a>` 
+                    : "";
+
+                downloadArea.innerHTML = `
+                    <strong>Scanned Data:</strong><br>
+                    <textarea class="universal-output" readonly>${decodedText}</textarea><br>
+                    ${actionButton}
+                    <button class="btn btn-warning" onclick="resumeScanner()" style="margin-top:10px;">Resume Scanning</button>
+                `;
+                downloadArea.style.display = 'block';
             }
         }
 
@@ -225,22 +237,32 @@
             const receivedCount = Object.keys(receivedFrames).length;
             const percentage = (receivedCount / totalFramesExpected) * 100;
             document.getElementById('progressFill').style.width = percentage + '%';
-            document.getElementById('receiveStatus').innerText = `Progress: ${receivedCount} / ${totalFramesExpected}`;
+            document.getElementById('receiveStatus').innerText = `Progress: ${receivedCount} / ${totalFramesExpected} frames`;
         }
 
-        function finalizeTransfer() {
-            stopScanner();
+        function finalizeFileTransfer() {
+            if(html5QrcodeScanner) html5QrcodeScanner.pause(true);
             document.getElementById('receiveStatus').innerText = "File Complete!";
             logDebug("Transfer finished! Stitching file...");
             
+            // Map and stitch all frames in exact sequential order
             let fullDataUrl = "";
             for (let i = 0; i < totalFramesExpected; i++) {
                 fullDataUrl += receivedFrames[i];
             }
 
-            const downloadLink = document.getElementById('downloadLink');
-            downloadLink.href = fullDataUrl;
-            document.getElementById('downloadArea').style.display = 'block';
+            const downloadArea = document.getElementById('downloadArea');
+            downloadArea.innerHTML = `
+                <a href="${fullDataUrl}" download="received_file" class="btn btn-success" style="text-decoration: none;">Download File</a>
+                <button class="btn btn-warning" onclick="resumeScanner()">Scan Another Code</button>
+            `;
+            downloadArea.style.display = 'block';
+        }
+
+        function resumeScanner() {
+            document.getElementById('downloadArea').style.display = 'none';
+            document.getElementById('receiveStatus').innerText = "Scanning Active. Point at any code.";
+            if(html5QrcodeScanner) html5QrcodeScanner.resume();
         }
 
         function stopScanner() {
