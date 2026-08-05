@@ -1,180 +1,478 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document Converter</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-            padding: 20px;
-            max-width: 600px;
-            margin: auto;
-        }
-        .container {
-            background: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        h2 {
-            font-size: 1.2rem;
-            color: #333;
-            margin-bottom: 15px;
-        }
-        .file-input {
-            width: 100%;
-            margin-bottom: 15px;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            background-color: #0056b3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 1rem;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        button:hover {
-            background-color: #004494;
-        }
-        .status {
-            margin-top: 10px;
-            font-size: 0.9rem;
-            color: #555;
-            min-height: 20px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF ⇄ Word Converter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#2a2f3a;
+    --text:#e8eaed; --muted:#9aa2b1; --accent:#6c8cff; --accent2:#8b6cff;
+    --good:#3ddc97; --warn:#ffb454; --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 20% -10%, #1c2130 0%, var(--bg) 60%);
+    color:var(--text); min-height:100vh; padding:24px 16px 60px;
+  }
+  .wrap{max-width:880px; margin:0 auto}
+  header{text-align:center; margin-bottom:22px}
+  header h1{
+    font-size:1.6rem; margin:0 0 6px; font-weight:700;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  header p{color:var(--muted); margin:0; font-size:.92rem; line-height:1.5}
+  .tabs{display:flex; gap:8px; background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:6px; margin-bottom:18px}
+  .tab{flex:1; text-align:center; padding:11px; border-radius:10px; cursor:pointer; font-weight:600; font-size:.92rem; color:var(--muted); transition:.15s}
+  .tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff}
+  .panel{display:none; background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:22px}
+  .panel.active{display:block}
+  .drop{
+    border:2px dashed var(--border); border-radius:14px; padding:34px 18px; text-align:center; cursor:pointer;
+    transition:.15s; background:var(--panel2);
+  }
+  .drop:hover, .drop.drag{border-color:var(--accent); background:#1b2030}
+  .drop .icon{font-size:2rem; margin-bottom:8px}
+  .drop .main{font-weight:600; margin-bottom:4px}
+  .drop .sub{color:var(--muted); font-size:.85rem}
+  input[type=file]{display:none}
+  .filerow{
+    display:flex; align-items:center; gap:10px; background:var(--panel2); border:1px solid var(--border);
+    border-radius:10px; padding:10px 12px; margin-top:14px; font-size:.9rem;
+  }
+  .filerow .name{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .filerow button{background:none; border:none; color:var(--bad); cursor:pointer; font-size:1rem}
+  .btn{
+    width:100%; margin-top:16px; padding:13px; border:none; border-radius:10px; font-weight:700; font-size:.95rem;
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; cursor:pointer; transition:.15s;
+  }
+  .btn:disabled{opacity:.45; cursor:not-allowed}
+  .btn:not(:disabled):hover{filter:brightness(1.08)}
+  .status{margin-top:14px; font-size:.87rem; color:var(--muted); min-height:1.2em}
+  .status.good{color:var(--good)} .status.bad{color:var(--bad)}
+  .progress{height:6px; background:var(--panel2); border-radius:4px; overflow:hidden; margin-top:10px; display:none}
+  .progress.on{display:block}
+  .progress .bar{height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .2s}
+  .options{margin-top:16px; padding-top:14px; border-top:1px solid var(--border)}
+  .options label{display:flex; align-items:center; gap:8px; font-size:.86rem; color:var(--muted); margin-bottom:8px; cursor:pointer}
+  .note{
+    margin-top:18px; font-size:.8rem; color:var(--muted); background:var(--panel2); border:1px solid var(--border);
+    border-radius:10px; padding:12px 14px; line-height:1.5;
+  }
+  .note b{color:var(--text)}
+  #preview{
+    margin-top:16px; max-height:340px; overflow:auto; background:#fff; color:#111; border-radius:10px;
+    padding:20px; font-size:.85rem; display:none; line-height:1.45;
+  }
+  #preview.on{display:block}
+  #preview table{border-collapse:collapse; width:100%; margin:8px 0}
+  #preview td, #preview th{border:1px solid #ccc; padding:4px 8px}
+  a.dl{color:#fff; text-decoration:none}
+  footer{text-align:center; color:var(--muted); font-size:.78rem; margin-top:26px}
+</style>
 </head>
 <body>
+<div class="wrap">
+  <header>
+    <h1>PDF ⇄ Word Converter</h1>
+    <p>Runs entirely in your browser — files never leave your device.<br>
+    Best-effort layout preservation: exact text, fonts &amp; structure are kept; pixel-identical positioning is not something any browser-based converter can guarantee.</p>
+  </header>
 
-    <!-- PDF to Word Section -->
-    <div class="container" id="pdf-to-word-section">
-        <h2>Convert PDF to Word</h2>
-        <input type="file" id="pdfFile" class="file-input" accept="application/pdf">
-        <button onclick="convertPdfToWord()">Convert to .docx</button>
-        <div id="pdf-status" class="status"></div>
+  <div class="tabs">
+    <div class="tab active" data-tab="p2w">PDF → Word</div>
+    <div class="tab" data-tab="w2p">Word → PDF</div>
+  </div>
+
+  <!-- PDF TO WORD -->
+  <div class="panel active" id="panel-p2w">
+    <div class="drop" id="drop-p2w">
+      <div class="icon">📄</div>
+      <div class="main">Drop a PDF here or click to browse</div>
+      <div class="sub">.pdf up to ~30MB</div>
+      <input type="file" id="file-p2w" accept="application/pdf">
     </div>
-
-    <!-- Word to PDF Section -->
-    <div class="container" id="word-to-pdf-section">
-        <h2>Convert Word to PDF</h2>
-        <input type="file" id="wordFile" class="file-input" accept=".doc, .docx">
-        <button onclick="convertWordToPdf()">Convert to .pdf</button>
-        <div id="word-status" class="status"></div>
+    <div class="filerow" id="row-p2w" style="display:none">
+      <span class="name" id="name-p2w"></span>
+      <button id="clear-p2w">✕</button>
     </div>
+    <div class="options">
+      <label><input type="checkbox" id="opt-indent" checked> Preserve horizontal spacing / indentation</label>
+      <label><input type="checkbox" id="opt-pagebreaks" checked> Insert page breaks matching the PDF</label>
+    </div>
+    <button class="btn" id="go-p2w" disabled>Convert to Word (.docx)</button>
+    <div class="progress" id="prog-p2w"><div class="bar"></div></div>
+    <div class="status" id="status-p2w"></div>
+    <div class="note"><b>How it works:</b> each page's text is read with its exact position, font size and bold/italic styling via pdf.js, then rebuilt as real, editable Word paragraphs (not an image). Multi-column layouts, scanned/image-only PDFs, and complex tables are the main cases where spacing may need manual touch-up afterward.</div>
+  </div>
 
-    <script>
-        // REPLACE THIS WITH YOUR ACTUAL API KEY FROM PDF.CO
-        const API_KEY = 'YOUR_ACTUAL_API_KEY'; 
+  <!-- WORD TO PDF -->
+  <div class="panel" id="panel-w2p">
+    <div class="drop" id="drop-w2p">
+      <div class="icon">📝</div>
+      <div class="main">Drop a .docx here or click to browse</div>
+      <div class="sub">.docx up to ~30MB</div>
+      <input type="file" id="file-w2p" accept=".docx">
+    </div>
+    <div class="filerow" id="row-w2p" style="display:none">
+      <span class="name" id="name-w2p"></span>
+      <button id="clear-w2p">✕</button>
+    </div>
+    <div class="options">
+      <label><input type="checkbox" id="opt-preview" checked> Show preview before export</label>
+    </div>
+    <button class="btn" id="go-w2p" disabled>Convert to PDF</button>
+    <div class="progress" id="prog-w2p"><div class="bar"></div></div>
+    <div class="status" id="status-w2p"></div>
+    <div id="preview"></div>
+    <div class="note"><b>How it works:</b> the .docx is parsed into structured HTML (headings, bold/italic, lists, tables) via mammoth.js, laid out on true A4 pages, then rasterized page-by-page into a PDF. Custom fonts embedded in the .docx aren't extracted — the closest web-safe equivalent is used instead.</div>
+  </div>
 
-        // ==========================================
-        // LOGIC 1: PDF to Word Conversion
-        // ==========================================
-        async function convertPdfToWord() {
-            const fileInput = document.getElementById('pdfFile');
-            const statusDiv = document.getElementById('pdf-status');
-            
-            if (!fileInput.files[0]) {
-                statusDiv.innerText = "Please select a PDF file first.";
-                return;
-            }
+  <footer>Built with pdf.js, mammoth.js, jsPDF &amp; html2canvas — all processing is local to this page.</footer>
+</div>
 
-            const file = fileInput.files[0];
-            statusDiv.innerText = `Uploading and processing ${file.name}... this may take a moment.`;
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-            try {
-                const tokenHeader = { 'x-api-key': API_KEY };
-                
-                // Step A: Get presigned URL
-                let response = await fetch(`https://api.pdf.co/v1/file/upload/get-presigned-url?name=${encodeURIComponent(file.name)}`, { headers: tokenHeader });
-                let data = await response.json();
-                if (data.error) throw new Error(data.message);
-                const presignedUrl = data.presignedUrl;
-                const uploadedFileUrl = data.url;
+// ---------- Tabs ----------
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+  };
+});
 
-                // Step B: Upload file
-                await fetch(presignedUrl, { method: 'PUT', body: file });
+function setupDrop(dropId, inputId, rowId, nameId, clearId, goId, accept){
+  const drop = document.getElementById(dropId);
+  const input = document.getElementById(inputId);
+  const row = document.getElementById(rowId);
+  const nameEl = document.getElementById(nameId);
+  const clearBtn = document.getElementById(clearId);
+  const goBtn = document.getElementById(goId);
+  let file = null;
 
-                // Step C: Convert to DOCX
-                const convertRes = await fetch('https://api.pdf.co/v1/pdf/convert/to/doc', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-                    body: JSON.stringify({ 
-                        url: uploadedFileUrl, 
-                        name: file.name.replace(/\.pdf$/i, '.docx') 
-                    })
-                });
-                const convertData = await convertRes.json();
-                if (convertData.error) throw new Error(convertData.message);
+  drop.onclick = ()=> input.click();
+  drop.ondragover = e=>{ e.preventDefault(); drop.classList.add('drag'); };
+  drop.ondragleave = ()=> drop.classList.remove('drag');
+  drop.ondrop = e=>{
+    e.preventDefault(); drop.classList.remove('drag');
+    if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  };
+  input.onchange = e=>{ if(e.target.files.length) handleFile(e.target.files[0]); };
+  clearBtn.onclick = e=>{
+    e.stopPropagation(); file=null; input.value='';
+    row.style.display='none'; drop.style.display='block'; goBtn.disabled=true;
+  };
 
-                // Step D: Download Export
-                window.location.href = convertData.url;
-                statusDiv.innerText = "Conversion successful! Download starting...";
-                
-            } catch (error) {
-                console.error("PDF to Word Error:", error);
-                statusDiv.innerText = `Error: ${error.message}. Check console or API Key.`;
-            }
-        }
+  function handleFile(f){
+    file = f;
+    nameEl.textContent = f.name + '  ·  ' + (f.size/1024/1024).toFixed(2) + ' MB';
+    row.style.display='flex'; drop.style.display='none'; goBtn.disabled=false;
+  }
+  return { getFile:()=>file };
+}
+const p2wFile = setupDrop('drop-p2w','file-p2w','row-p2w','name-p2w','clear-p2w','go-p2w');
+const w2pFile = setupDrop('drop-w2p','file-w2p','row-w2p','name-w2p','clear-w2p','go-w2p');
 
-        // ==========================================
-        // LOGIC 2: Word to PDF Conversion
-        // ==========================================
-        async function convertWordToPdf() {
-            const fileInput = document.getElementById('wordFile');
-            const statusDiv = document.getElementById('word-status');
-            
-            if (!fileInput.files[0]) {
-                statusDiv.innerText = "Please select a Word file first.";
-                return;
-            }
+function setStatus(id, msg, cls){
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status' + (cls?(' '+cls):'');
+}
+function setProgress(id, pct){
+  const wrap = document.getElementById(id);
+  wrap.classList.toggle('on', pct>0 && pct<100);
+  wrap.querySelector('.bar').style.width = pct+'%';
+}
 
-            const file = fileInput.files[0];
-            statusDiv.innerText = `Uploading and processing ${file.name}... this may take a moment.`;
+// =====================================================================
+// PDF -> DOCX
+// =====================================================================
+function xmlEscape(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
-            try {
-                const tokenHeader = { 'x-api-key': API_KEY };
-                
-                // Step A: Get presigned URL
-                let response = await fetch(`https://api.pdf.co/v1/file/upload/get-presigned-url?name=${encodeURIComponent(file.name)}`, { headers: tokenHeader });
-                let data = await response.json();
-                if (data.error) throw new Error(data.message);
-                const presignedUrl = data.presignedUrl;
-                const uploadedFileUrl = data.url;
+async function extractPdfStructure(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  const pages = [];
+  for(let p=1; p<=pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const viewport = page.getViewport({scale:1});
+    const content = await page.getTextContent();
+    const items = content.items.map(it=>{
+      const t = it.transform; // [a,b,c,d,e,f] -> e=x, f=y
+      return {
+        str: it.str,
+        x: t[4],
+        y: t[5],
+        fontHeight: Math.hypot(t[2], t[3]) || Math.abs(t[3]) || 10,
+        fontName: it.fontName || '',
+        width: it.width || 0
+      };
+    }).filter(it => it.str.trim().length>0 || it.str.length>0);
+    pages.push({items, width: viewport.width, height: viewport.height});
+    setProgress('prog-p2w', 10 + Math.round(30*p/pdf.numPages));
+  }
+  return { pages, styles: pdf._transport ? null : null, fontMap: buildFontMap(pdf) };
+}
 
-                // Step B: Upload file
-                await fetch(presignedUrl, { method: 'PUT', body: file });
+function buildFontMap(){ return {}; }
 
-                // Step C: Convert to PDF
-                const convertRes = await fetch('https://api.pdf.co/v1/pdf/convert/from/doc', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-                    body: JSON.stringify({ 
-                        url: uploadedFileUrl, 
-                        name: file.name.replace(/\.docx?$/i, '.pdf') 
-                    })
-                });
-                const convertData = await convertRes.json();
-                if (convertData.error) throw new Error(convertData.message);
+function groupLines(items){
+  // group by y with tolerance, then sort left-to-right
+  const sorted = [...items].sort((a,b)=> b.y - a.y || a.x - b.x);
+  const lines = [];
+  const TOL = 2.5;
+  for(const it of sorted){
+    let line = lines.find(l => Math.abs(l.y - it.y) <= TOL);
+    if(!line){ line = {y: it.y, items: []}; lines.push(line); }
+    line.items.push(it);
+  }
+  lines.sort((a,b)=> b.y - a.y);
+  lines.forEach(l => l.items.sort((a,b)=> a.x - b.x));
+  return lines;
+}
 
-                // Step D: Download Export
-                window.location.href = convertData.url;
-                statusDiv.innerText = "Conversion successful! Download starting...";
-                
-            } catch (error) {
-                console.error("Word to PDF Error:", error);
-                statusDiv.innerText = `Error: ${error.message}. Check console or API Key.`;
-            }
-        }
-    </script>
+function mergeRuns(items){
+  // merge adjacent items with same style into runs, preserving gaps as spaces
+  const runs = [];
+  let prev = null;
+  for(const it of items){
+    const bold = /bold/i.test(it.fontName);
+    const italic = /italic|oblique/i.test(it.fontName);
+    const sz = Math.max(6, Math.round(it.fontHeight * 2)); // half-points
+    if(prev && prev.bold===bold && prev.italic===italic && prev.sz===sz){
+      const gap = it.x - prev.endX;
+      prev.text += (gap > it.fontHeight*0.28 ? ' ' : '') + it.str;
+      prev.endX = it.x + it.width;
+    } else {
+      runs.push({text: it.str, bold, italic, sz, endX: it.x + it.width});
+      prev = runs[runs.length-1];
+    }
+  }
+  return runs;
+}
+
+function buildDocumentXml(pages, opts){
+  const CHAR_W_APPROX = 5.2; // approx pt width per space for indent estimation at default size
+  let body = '';
+  pages.forEach((page, pIdx)=>{
+    const lines = groupLines(page.items);
+    let lastY = null;
+    lines.forEach(line=>{
+      if(line.items.length===0) return;
+      const runs = mergeRuns(line.items);
+      let indentTwips = 0;
+      if(opts.indent){
+        const firstX = line.items[0].x;
+        indentTwips = Math.max(0, Math.round((firstX / CHAR_W_APPROX) * 60)); // rough twips
+        indentTwips = Math.min(indentTwips, 6000);
+      }
+      // vertical spacing before, based on gap from previous line
+      let spaceBefore = 0;
+      if(lastY !== null){
+        const gap = lastY - line.y;
+        if(gap > 22) spaceBefore = 160; // extra paragraph gap
+      }
+      lastY = line.y;
+
+      const runXml = runs.map(r=>{
+        const rpr = `<w:rPr>${r.bold?'<w:b/>':''}${r.italic?'<w:i/>':''}<w:sz w:val="${r.sz}"/><w:szCs w:val="${r.sz}"/></w:rPr>`;
+        return `<w:r>${rpr}<w:t xml:space="preserve">${xmlEscape(r.text)}</w:t></w:r>`;
+      }).join('');
+
+      const pPr = `<w:pPr><w:spacing w:before="${spaceBefore}" w:after="0" w:line="240" w:lineRule="auto"/>${indentTwips? `<w:ind w:left="${indentTwips}"/>`:''}</w:pPr>`;
+      body += `<w:p>${pPr}${runXml}</w:p>`;
+    });
+    if(opts.pagebreaks && pIdx < pages.length-1){
+      body += `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+    }
+    setProgress('prog-p2w', 45 + Math.round(35*(pIdx+1)/pages.length));
+  });
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>${body}
+<w:sectPr>
+  <w:pgSz w:w="11906" w:h="16838"/>
+  <w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/>
+</w:sectPr>
+</w:body>
+</w:document>`;
+}
+
+async function buildDocxBlob(documentXml){
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>`);
+  zip.folder('_rels').file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`);
+  const word = zip.folder('word');
+  word.file('document.xml', documentXml);
+  word.file('styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults>
+  <w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault>
+</w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
+</w:styles>`);
+  word.folder('_rels').file('document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`);
+  const docProps = zip.folder('docProps');
+  docProps.file('core.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<dc:creator>PDF to Word Converter</dc:creator><cp:lastModifiedBy>PDF to Word Converter</cp:lastModifiedBy>
+</cp:coreProperties>`);
+  docProps.file('app.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>PDF-Word-Converter</Application></Properties>`);
+
+  return await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+
+document.getElementById('go-p2w').onclick = async ()=>{
+  const file = p2wFile.getFile();
+  if(!file) return;
+  const btn = document.getElementById('go-p2w');
+  btn.disabled = true;
+  setStatus('status-p2w','Reading PDF…');
+  setProgress('prog-p2w', 5);
+  try{
+    const opts = {
+      indent: document.getElementById('opt-indent').checked,
+      pagebreaks: document.getElementById('opt-pagebreaks').checked
+    };
+    const {pages} = await extractPdfStructure(file);
+    setStatus('status-p2w','Rebuilding document structure…');
+    const xml = buildDocumentXml(pages, opts);
+    setStatus('status-p2w','Packaging .docx…');
+    setProgress('prog-p2w', 90);
+    const blob = await buildDocxBlob(xml);
+    setProgress('prog-p2w', 100);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name.replace(/\.pdf$/i,'') + '.docx';
+    document.body.appendChild(a); a.click(); a.remove();
+    setStatus('status-p2w', '✓ Converted — download started.', 'good');
+  }catch(err){
+    console.error(err);
+    setStatus('status-p2w', '✗ Conversion failed: ' + err.message, 'bad');
+  }finally{
+    btn.disabled = false;
+    setTimeout(()=>setProgress('prog-p2w',0), 800);
+  }
+};
+
+// =====================================================================
+// DOCX -> PDF
+// =====================================================================
+document.getElementById('go-w2p').onclick = async ()=>{
+  const file = w2pFile.getFile();
+  if(!file) return;
+  const btn = document.getElementById('go-w2p');
+  btn.disabled = true;
+  setStatus('status-w2p','Parsing Word document…');
+  setProgress('prog-w2p', 10);
+  try{
+    const buf = await file.arrayBuffer();
+    const styleMap = [
+      "p[style-name='Heading 1'] => h1:fresh",
+      "p[style-name='Heading 2'] => h2:fresh",
+      "p[style-name='Heading 3'] => h3:fresh",
+      "b => strong", "i => em", "u => u"
+    ];
+    const result = await mammoth.convertToHtml({arrayBuffer: buf}, {styleMap});
+    setProgress('prog-w2p', 40);
+
+    const previewEl = document.getElementById('preview');
+    const showPreview = document.getElementById('opt-preview').checked;
+    previewEl.innerHTML = result.value;
+    previewEl.classList.toggle('on', showPreview);
+
+    // build an off-DOM A4-width render container
+    const container = document.createElement('div');
+    container.style.position='fixed'; container.style.left='-99999px'; container.style.top='0';
+    container.style.width='794px'; // ~210mm at 96dpi
+    container.style.padding='48px 56px';
+    container.style.background='#ffffff';
+    container.style.color='#111111';
+    container.style.fontFamily='Calibri, Arial, sans-serif';
+    container.style.fontSize='14px';
+    container.style.lineHeight='1.5';
+    container.innerHTML = `<style>
+        table{border-collapse:collapse;width:100%;margin:8px 0}
+        td,th{border:1px solid #999;padding:4px 8px}
+        h1{font-size:22px} h2{font-size:18px} h3{font-size:15px}
+      </style>` + result.value;
+    document.body.appendChild(container);
+
+    setStatus('status-w2p','Rendering pages…');
+    const canvas = await html2canvas(container, {scale:2, useCORS:true, backgroundColor:'#ffffff'});
+    document.body.removeChild(container);
+    setProgress('prog-w2p', 75);
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({unit:'pt', format:'a4'});
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const imgW = pageW;
+    const imgH = canvas.height * (imgW / canvas.width);
+
+    let renderedHeight = 0;
+    let pageIdx = 0;
+    const pxPerPagePt = canvas.width / imgW; // canvas px per output pt
+    const pageHeightInCanvasPx = pageH * pxPerPagePt;
+
+    while(renderedHeight < canvas.height){
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = Math.min(pageHeightInCanvasPx, canvas.height - renderedHeight);
+      const ctx = sliceCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0,0,sliceCanvas.width,sliceCanvas.height);
+      ctx.drawImage(canvas, 0, renderedHeight, canvas.width, sliceCanvas.height, 0, 0, canvas.width, sliceCanvas.height);
+      const imgData = sliceCanvas.toDataURL('image/jpeg', 0.95);
+      if(pageIdx>0) pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgW, sliceCanvas.height/pxPerPagePt);
+      renderedHeight += sliceCanvas.height;
+      pageIdx++;
+      setProgress('prog-w2p', 75 + Math.round(20*renderedHeight/canvas.height));
+    }
+
+    pdf.save(file.name.replace(/\.docx$/i,'') + '.pdf');
+    setProgress('prog-w2p', 100);
+    setStatus('status-w2p', `✓ Converted (${pageIdx} page${pageIdx>1?'s':''}) — download started.`, 'good');
+  }catch(err){
+    console.error(err);
+    setStatus('status-w2p', '✗ Conversion failed: ' + err.message, 'bad');
+  }finally{
+    btn.disabled = false;
+    setTimeout(()=>setProgress('prog-w2p',0), 800);
+  }
+};
+</script>
 </body>
 </html>
