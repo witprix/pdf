@@ -91,7 +91,6 @@
     <div class="tab" data-tab="w2p">Word → PDF</div>
   </div>
 
-  <!-- PDF TO WORD -->
   <div class="panel active" id="panel-p2w">
     <div class="drop" id="drop-p2w">
       <div class="icon">📄</div>
@@ -113,7 +112,6 @@
     <div class="note"><b>How it works:</b> each page's text is read with its exact position, font size and bold/italic styling via pdf.js, then rebuilt as real, editable Word paragraphs (not an image). Multi-column layouts, scanned/image-only PDFs, and complex tables are the main cases where spacing may need manual touch-up afterward.</div>
   </div>
 
-  <!-- WORD TO PDF -->
   <div class="panel" id="panel-w2p">
     <div class="drop" id="drop-w2p">
       <div class="icon">📝</div>
@@ -141,7 +139,6 @@
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-// ---------- Tabs ----------
 document.querySelectorAll('.tab').forEach(t=>{
   t.onclick = ()=>{
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
@@ -195,7 +192,7 @@ function setProgress(id, pct){
 }
 
 // =====================================================================
-// PDF -> DOCX
+// PDF -> DOCX (ENHANCED ALIGNMENT LOGIC)
 // =====================================================================
 function xmlEscape(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -210,7 +207,7 @@ async function extractPdfStructure(file){
     const viewport = page.getViewport({scale:1});
     const content = await page.getTextContent();
     const items = content.items.map(it=>{
-      const t = it.transform; // [a,b,c,d,e,f] -> e=x, f=y
+      const t = it.transform; 
       return {
         str: it.str,
         x: t[4],
@@ -223,16 +220,13 @@ async function extractPdfStructure(file){
     pages.push({items, width: viewport.width, height: viewport.height});
     setProgress('prog-p2w', 10 + Math.round(30*p/pdf.numPages));
   }
-  return { pages, styles: pdf._transport ? null : null, fontMap: buildFontMap(pdf) };
+  return { pages, styles: pdf._transport ? null : null, fontMap: {} };
 }
 
-function buildFontMap(){ return {}; }
-
 function groupLines(items){
-  // group by y with tolerance, then sort left-to-right
   const sorted = [...items].sort((a,b)=> b.y - a.y || a.x - b.x);
   const lines = [];
-  const TOL = 2.5;
+  const TOL = 3.0; // Slightly increased tolerance for tables
   for(const it of sorted){
     let line = lines.find(l => Math.abs(l.y - it.y) <= TOL);
     if(!line){ line = {y: it.y, items: []}; lines.push(line); }
@@ -244,19 +238,32 @@ function groupLines(items){
 }
 
 function mergeRuns(items){
-  // merge adjacent items with same style into runs, preserving gaps as spaces
   const runs = [];
   let prev = null;
   for(const it of items){
     const bold = /bold/i.test(it.fontName);
     const italic = /italic|oblique/i.test(it.fontName);
-    const sz = Math.max(6, Math.round(it.fontHeight * 2)); // half-points
+    const sz = Math.max(6, Math.round(it.fontHeight * 2)); 
+    
     if(prev && prev.bold===bold && prev.italic===italic && prev.sz===sz){
       const gap = it.x - prev.endX;
-      prev.text += (gap > it.fontHeight*0.28 ? ' ' : '') + it.str;
+      // ENHANCED: Dynamic space calculation to prevent column drift in tables
+      if (gap > (it.fontHeight * 0.25)) {
+          const spaceCount = Math.max(1, Math.round(gap / (it.fontHeight * 0.28)));
+          prev.text += ' '.repeat(spaceCount);
+      }
+      prev.text += it.str;
       prev.endX = it.x + it.width;
     } else {
-      runs.push({text: it.str, bold, italic, sz, endX: it.x + it.width});
+      let prefix = '';
+      if (prev) {
+          const gap = it.x - prev.endX;
+          if (gap > (it.fontHeight * 0.25)) {
+              const spaceCount = Math.max(1, Math.round(gap / (it.fontHeight * 0.28)));
+              prefix = ' '.repeat(spaceCount);
+          }
+      }
+      runs.push({text: prefix + it.str, bold, italic, sz, endX: it.x + it.width});
       prev = runs[runs.length-1];
     }
   }
@@ -264,7 +271,7 @@ function mergeRuns(items){
 }
 
 function buildDocumentXml(pages, opts){
-  const CHAR_W_APPROX = 5.2; // approx pt width per space for indent estimation at default size
+  const CHAR_W_APPROX = 5.2; 
   let body = '';
   pages.forEach((page, pIdx)=>{
     const lines = groupLines(page.items);
@@ -275,14 +282,14 @@ function buildDocumentXml(pages, opts){
       let indentTwips = 0;
       if(opts.indent){
         const firstX = line.items[0].x;
-        indentTwips = Math.max(0, Math.round((firstX / CHAR_W_APPROX) * 60)); // rough twips
+        indentTwips = Math.max(0, Math.round((firstX / CHAR_W_APPROX) * 60)); 
         indentTwips = Math.min(indentTwips, 6000);
       }
-      // vertical spacing before, based on gap from previous line
+      
       let spaceBefore = 0;
       if(lastY !== null){
         const gap = lastY - line.y;
-        if(gap > 22) spaceBefore = 160; // extra paragraph gap
+        if(gap > 22) spaceBefore = 160; 
       }
       lastY = line.y;
 
@@ -313,41 +320,15 @@ function buildDocumentXml(pages, opts){
 
 async function buildDocxBlob(documentXml){
   const zip = new JSZip();
-  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
-<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
-</Types>`);
-  zip.folder('_rels').file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
-<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
-</Relationships>`);
+  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n<Default Extension="xml" ContentType="application/xml"/>\n<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>\n<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>\n<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>\n<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>\n</Types>`);
+  zip.folder('_rels').file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>\n<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>\n<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>\n</Relationships>`);
   const word = zip.folder('word');
   word.file('document.xml', documentXml);
-  word.file('styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:docDefaults>
-  <w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault>
-</w:docDefaults>
-<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
-</w:styles>`);
-  word.folder('_rels').file('document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`);
+  word.file('styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">\n<w:docDefaults>\n  <w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault>\n</w:docDefaults>\n<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>\n</w:styles>`);
+  word.folder('_rels').file('document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>\n</Relationships>`);
   const docProps = zip.folder('docProps');
-  docProps.file('core.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">
-<dc:creator>PDF to Word Converter</dc:creator><cp:lastModifiedBy>PDF to Word Converter</cp:lastModifiedBy>
-</cp:coreProperties>`);
-  docProps.file('app.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>PDF-Word-Converter</Application></Properties>`);
+  docProps.file('core.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">\n<dc:creator>PDF to Word Converter</dc:creator><cp:lastModifiedBy>PDF to Word Converter</cp:lastModifiedBy>\n</cp:coreProperties>`);
+  docProps.file('app.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>PDF-Word-Converter</Application></Properties>`);
 
   return await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
@@ -387,7 +368,7 @@ document.getElementById('go-p2w').onclick = async ()=>{
 };
 
 // =====================================================================
-// DOCX -> PDF
+// DOCX -> PDF (ENHANCED RENDERING RESOLUTION)
 // =====================================================================
 document.getElementById('go-w2p').onclick = async ()=>{
   const file = w2pFile.getFile();
@@ -412,10 +393,9 @@ document.getElementById('go-w2p').onclick = async ()=>{
     previewEl.innerHTML = result.value;
     previewEl.classList.toggle('on', showPreview);
 
-    // build an off-DOM A4-width render container
     const container = document.createElement('div');
     container.style.position='fixed'; container.style.left='-99999px'; container.style.top='0';
-    container.style.width='794px'; // ~210mm at 96dpi
+    container.style.width='794px'; 
     container.style.padding='48px 56px';
     container.style.background='#ffffff';
     container.style.color='#111111';
@@ -430,7 +410,8 @@ document.getElementById('go-w2p').onclick = async ()=>{
     document.body.appendChild(container);
 
     setStatus('status-w2p','Rendering pages…');
-    const canvas = await html2canvas(container, {scale:2, useCORS:true, backgroundColor:'#ffffff'});
+    // ENHANCED: Scale increased to 4 for much higher clarity and font rendering
+    const canvas = await html2canvas(container, {scale:4, useCORS:true, backgroundColor:'#ffffff'});
     document.body.removeChild(container);
     setProgress('prog-w2p', 75);
 
@@ -443,7 +424,7 @@ document.getElementById('go-w2p').onclick = async ()=>{
 
     let renderedHeight = 0;
     let pageIdx = 0;
-    const pxPerPagePt = canvas.width / imgW; // canvas px per output pt
+    const pxPerPagePt = canvas.width / imgW; 
     const pageHeightInCanvasPx = pageH * pxPerPagePt;
 
     while(renderedHeight < canvas.height){
