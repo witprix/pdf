@@ -1,0 +1,2567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Toolkit - All-in-One PDF Editor v3.0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --container-bg: white;
+            --text-main: #333;
+            --text-muted: #666;
+            --upload-bg: #f8f9ff;
+            --upload-border: #667eea;
+            --upload-hover: #f0f2ff;
+            --item-bg: #f5f5f5;
+            --border-color: #ddd;
+            --shadow-color: rgba(0, 0, 0, 0.2);
+        }
+
+        [data-theme="dark"] {
+            --bg-gradient: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            --container-bg: #1e1e2f;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --upload-bg: #2a2a40;
+            --upload-border: #4a4a7a;
+            --upload-hover: #32324e;
+            --item-bg: #2a2a35;
+            --border-color: #444;
+            --shadow-color: rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            padding: 20px;
+            color: var(--text-main);
+            transition: background 0.3s ease;
+        }
+
+        .theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            backdrop-filter: blur(5px);
+            transition: background 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: var(--container-bg);
+            color: var(--upload-border);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1em;
+        }
+
+        .tab-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px var(--shadow-color);
+        }
+
+        .tab-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+            background: var(--container-bg);
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px var(--shadow-color);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .upload-area {
+            border: 3px dashed var(--upload-border);
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--upload-bg);
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: var(--upload-hover);
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: var(--upload-hover);
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+
+        .upload-area p {
+            color: var(--text-main);
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        .upload-area small {
+            color: var(--text-muted);
+            display: block;
+        }
+
+        .file-list {
+            margin-top: 20px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: var(--item-bg);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+        }
+
+        .file-item-name {
+            flex-grow: 1;
+            word-break: break-all;
+        }
+
+        .file-pages {
+            color: var(--text-muted);
+            margin: 0 15px;
+            font-size: 0.9em;
+        }
+
+        .btn-remove {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.3s ease;
+        }
+
+        .btn-remove:hover {
+            background: #ff5252;
+        }
+
+        .page-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .page-thumbnail {
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--container-bg);
+        }
+
+        .page-thumbnail:hover {
+            border-color: var(--upload-border);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+
+        .page-thumbnail:focus {
+            outline: 3px solid #667eea;
+            outline-offset: 2px;
+        }
+
+        .page-thumbnail.selected {
+            border-color: var(--upload-border);
+            background: var(--upload-hover);
+        }
+
+        .page-preview {
+            width: 100%;
+            height: 150px;
+            background: var(--item-bg);
+            border-radius: 4px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2em;
+            color: var(--text-muted);
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .page-preview canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+        }
+
+        .page-preview.thumb-loading {
+            font-size: 0.8em;
+            color: var(--text-muted);
+        }
+
+        .page-label {
+            font-weight: 600;
+            color: var(--text-main);
+            font-size: 0.9em;
+        }
+
+        .page-checkbox {
+            margin-top: 8px;
+            pointer-events: none;
+        }
+
+        .range-input {
+            width: 100%;
+            margin: 20px 0;
+        }
+
+        .range-input input[type="text"],
+        .range-input input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 1em;
+            background: var(--container-bg);
+            color: var(--text-main);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1em;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            flex-grow: 1;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: var(--item-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .status.success {
+            display: block;
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            display: block;
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            display: block;
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .option-group {
+            margin: 20px 0;
+            padding: 15px;
+            background: var(--upload-bg);
+            border-radius: 8px;
+        }
+
+        .option-group label {
+            display: block;
+            margin: 10px 0 5px 0;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .option-group select,
+        .option-group input[type="number"],
+        .option-group input[type="password"],
+        .option-group input[type="text"],
+        .option-group textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 1em;
+            background: var(--container-bg);
+            color: var(--text-main);
+        }
+
+        .help-text {
+            font-size: 0.9em;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .tabs {
+                flex-direction: column;
+            }
+
+            .tab-btn {
+                width: 100%;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .page-grid {
+                grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">🌓 Toggle Dark Mode</button>
+    <div class="container">
+        <div class="header">
+            <h1>📄 PDF Toolkit</h1>
+            <p>Your all-in-one PDF editor - Split, Merge, Extract & More</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('merge')">Merge</button>
+            <button class="tab-btn" onclick="switchTab('split')">Split</button>
+            <button class="tab-btn" onclick="switchTab('extract')">Extract Pages</button>
+            <button class="tab-btn" onclick="switchTab('rotate')">Rotate</button>
+            <button class="tab-btn" onclick="switchTab('delete')">Delete Pages</button>
+            <button class="tab-btn" onclick="switchTab('reorder')">Reorder</button>
+            <button class="tab-btn" onclick="switchTab('compress')">Compress</button>
+            <button class="tab-btn" onclick="switchTab('editfields')">Edit Fields</button>
+            <button class="tab-btn" onclick="switchTab('addtext')">Add Text</button>
+            <button class="tab-btn" onclick="switchTab('removepw')">Remove Password</button>
+            <button class="tab-btn" onclick="switchTab('metadata')">Metadata</button>
+            <button class="tab-btn" onclick="switchTab('convert')">Images ↔ PDF</button>
+            <button class="tab-btn" onclick="switchTab('watermark')">Watermark</button>
+        </div>
+
+        <!-- Merge Tab -->
+        <div id="merge" class="tab-content active">
+            <h2>Merge Multiple PDFs</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Upload multiple PDFs and combine them into a single file.</p>
+            
+            <div class="upload-area" onclick="document.getElementById('merge-files').click()">
+                <div class="upload-icon">📁</div>
+                <p>Click to upload or drag & drop</p>
+                <small>Select multiple PDF files</small>
+                <input type="file" id="merge-files" multiple accept=".pdf" onchange="handleMergeFiles(event)">
+            </div>
+
+            <div class="file-list" id="merge-list"></div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="mergePDFs()" id="merge-btn" disabled>Merge PDFs</button>
+                <button class="btn btn-secondary" onclick="clearMergeFiles()">Clear</button>
+            </div>
+
+            <div class="status" id="merge-status"></div>
+        </div>
+
+        <!-- Split Tab -->
+        <div id="split" class="tab-content">
+            <h2>Split PDF</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Upload a PDF and split it using flexible options below.</p>
+            
+            <div class="upload-area" onclick="document.getElementById('split-file').click()">
+                <div class="upload-icon">📄</div>
+                <p>Click to upload or drag & drop</p>
+                <small>Select a PDF file</small>
+                <input type="file" id="split-file" accept=".pdf" onchange="handleSplitFile(event)">
+            </div>
+
+            <div id="split-info"></div>
+
+            <div id="split-options" style="display: none;">
+                <div class="option-group">
+                    <label>Split Mode:</label>
+                    <select id="split-mode" onchange="updateSplitModeUI()">
+                        <option value="all">Every Page → Separate File</option>
+                        <option value="range">Extract a Page Range (single file)</option>
+                        <option value="every-n">Split Every N Pages (chunks)</option>
+                        <option value="custom">Custom Ranges (multiple files)</option>
+                        <option value="odd-even">Odd / Even Pages</option>
+                        <option value="half">Split in Half</option>
+                    </select>
+                </div>
+
+                <!-- Range mode -->
+                <div id="split-range-opts" class="option-group" style="display: none;">
+                    <label>Page Range (e.g., 3-8):</label>
+                    <input type="text" id="split-range-input" placeholder="e.g., 3-8">
+                    <p class="help-text">Extracts pages 3 through 8 into one PDF file.</p>
+                </div>
+
+                <!-- Every N pages -->
+                <div id="split-everyn-opts" class="option-group" style="display: none;">
+                    <label>Pages per file:</label>
+                    <input type="number" id="split-everyn-input" min="1" value="2">
+                    <p class="help-text">e.g., 2 = pages split into chunks of 2 pages each (1-2, 3-4, 5-6...)</p>
+                </div>
+
+                <!-- Custom ranges -->
+                <div id="split-custom-opts" class="option-group" style="display: none;">
+                    <label>Custom Ranges (comma-separated, one file per range):</label>
+                    <input type="text" id="split-custom-input" placeholder="e.g., 1-3, 4-5, 6-10">
+                    <p class="help-text">Each range becomes a separate downloaded PDF. e.g., "1-3, 4-5, 6-10" creates 3 files.</p>
+                </div>
+
+                <!-- Odd/Even -->
+                <div id="split-oddeven-opts" class="option-group" style="display: none;">
+                    <label>Choose pages:</label>
+                    <select id="split-oddeven-input">
+                        <option value="odd">Odd Pages Only (1, 3, 5...)</option>
+                        <option value="even">Even Pages Only (2, 4, 6...)</option>
+                        <option value="both">Both (2 separate files)</option>
+                    </select>
+                </div>
+
+                <!-- Half -->
+                <div id="split-half-opts" class="option-group" style="display: none;">
+                    <p class="help-text">Splits the PDF into two equal halves (first half + second half) as 2 separate files.</p>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="splitPDF()" id="split-btn" disabled>Split PDF</button>
+                <button class="btn btn-secondary" onclick="clearSplitFile()">Clear</button>
+            </div>
+
+            <div class="status" id="split-status"></div>
+        </div>
+
+        <!-- Extract Tab -->
+        <div id="extract" class="tab-content">
+            <h2>Extract Specific Pages</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Select specific pages from a PDF to extract.</p>
+            
+            <div class="upload-area" onclick="document.getElementById('extract-file').click()">
+                <div class="upload-icon">📄</div>
+                <p>Click to upload or drag & drop</p>
+                <small>Select a PDF file</small>
+                <input type="file" id="extract-file" accept=".pdf" onchange="handleExtractFile(event)">
+            </div>
+
+            <div id="extract-thumbs" class="page-grid"></div>
+
+            <div class="option-group">
+                <label>Or enter page numbers:</label>
+                <input type="text" id="extract-pages" placeholder="e.g., 1,3,5 or 1-3,5-7">
+                <p class="help-text">Enter page numbers separated by commas, or use ranges like 1-5</p>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="extractPages()" id="extract-btn" disabled>Extract Selected</button>
+                <button class="btn btn-secondary" onclick="clearExtractFile()">Clear</button>
+            </div>
+
+            <div class="status" id="extract-status"></div>
+        </div>
+
+        <!-- Rotate Tab -->
+        <div id="rotate" class="tab-content">
+            <h2>Rotate Pages</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Rotate selected pages by 90°, 180°, or 270°.</p>
+            
+            <div class="upload-area" onclick="document.getElementById('rotate-file').click()">
+                <div class="upload-icon">📄</div>
+                <p>Click to upload or drag & drop</p>
+                <small>Select a PDF file</small>
+                <input type="file" id="rotate-file" accept=".pdf" onchange="handleRotateFile(event)">
+            </div>
+
+            <div id="rotate-thumbs" class="page-grid"></div>
+
+            <div class="option-group">
+                <label>Rotation angle:</label>
+                <select id="rotate-angle">
+                    <option value="90">90° Clockwise</option>
+                    <option value="180">180°</option>
+                    <option value="270">270° Clockwise (90° Counter)</option>
+                </select>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="rotatePages()" id="rotate-btn" disabled>Rotate Selected</button>
+                <button class="btn btn-secondary" onclick="clearRotateFile()">Clear</button>
+            </div>
+
+            <div class="status" id="rotate-status"></div>
+        </div>
+
+        <!-- Delete Tab -->
+        <div id="delete" class="tab-content">
+            <h2>Delete Pages</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Remove unwanted pages from your PDF.</p>
+            
+            <div class="upload-area" onclick="document.getElementById('delete-file').click()">
+                <div class="upload-icon">📄</div>
+                <p>Click to upload or drag & drop</p>
+                <small>Select a PDF file</small>
+                <input type="file" id="delete-file" accept=".pdf" onchange="handleDeleteFile(event)">
+            </div>
+
+            <div id="delete-thumbs" class="page-grid"></div>
+
+            <div class="option-group">
+                <label>Pages to delete:</label>
+                <input type="text" id="delete-pages" placeholder="e.g., 2,4,6 or 2-4">
+                <p class="help-text">Enter page numbers to delete, separated by commas</p>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="deletePages()" id="delete-btn" disabled>Delete Selected Pages</button>
+                <button class="btn btn-secondary" onclick="clearDeleteFile()">Clear</button>
+            </div>
+
+            <div class="status" id="delete-status"></div>
+        </div>
+
+        <!-- Reorder Tab -->
+        <div id="reorder" class="tab-content">
+            <h2>Reorder Pages</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Click pages below in the order you want them to appear, or type the order directly.</p>
+            
+            <div class="upload-area" onclick="document.getElementById('reorder-file').click()">
+                <div class="upload-icon">📄</div>
+                <p>Click to upload or drag & drop</p>
+                <small>Select a PDF file</small>
+                <input type="file" id="reorder-file" accept=".pdf" onchange="handleReorderFile(event)">
+            </div>
+
+            <div id="reorder-thumbs" class="page-grid"></div>
+
+            <div class="option-group">
+                <label>New page order:</label>
+                <input type="text" id="reorder-order" placeholder="e.g., 3,1,2 or 5,4,3,2,1" oninput="syncReorderInputToThumbs()">
+                <p class="help-text">Click thumbnails above to build this automatically, or type page numbers in your desired order.</p>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="reorderPages()" id="reorder-btn" disabled>Reorder Pages</button>
+                <button class="btn btn-secondary" onclick="resetReorderSequence()">Reset Order</button>
+                <button class="btn btn-secondary" onclick="clearReorderFile()">Clear</button>
+            </div>
+
+            <div class="status" id="reorder-status"></div>
+        </div>
+
+        <!-- Compress Tab -->
+        <div id="compress" class="tab-content">
+            <h2>Compress PDF</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Reduce PDF file size while maintaining quality.</p>
+            
+            <div class="upload-area" onclick="document.getElementById('compress-file').click()">
+                <div class="upload-icon">📄</div>
+                <p>Click to upload or drag & drop</p>
+                <small>Select a PDF file</small>
+                <input type="file" id="compress-file" accept=".pdf" onchange="handleCompressFile(event)">
+            </div>
+
+            <div id="compress-info"></div>
+
+            <div class="option-group">
+                <label>Compression level:</label>
+                <select id="compress-level">
+                    <option value="high">High Compression (Heavy Image conversion, non-selectable text)</option>
+                    <option value="medium" selected>Standard (Metadata Clean & Optimize)</option>
+                </select>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="compressPDF()" id="compress-btn" disabled>Compress PDF</button>
+                <button class="btn btn-secondary" onclick="clearCompressFile()">Clear</button>
+            </div>
+
+            <div class="status" id="compress-status"></div>
+        </div>
+
+        <!-- Edit Fields Tab -->
+        <div id="editfields" class="tab-content">
+            <h2>Edit PDF Forms (Visual Editor)</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Fill in any PDF form by clicking on fields and typing.</p>
+            
+            <div class="upload-area" onclick="document.getElementById('editfields-file').click()">
+                <div class="upload-icon">📋</div>
+                <p>Click to upload or drag & drop</p>
+                <small>Select any PDF form (fillable or flat)</small>
+                <input type="file" id="editfields-file" accept=".pdf" onchange="handleEditFieldsFile(event)">
+            </div>
+
+            <div id="editfields-info"></div>
+            <div id="editfields-container" style="display: none;"></div>
+
+            <div id="editfields-viewer" style="display: none; margin: 20px 0;">
+                <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" onclick="previousEditPage()" id="edit-prev-btn" disabled>← Previous</button>
+                    <select id="editfields-page-selector" onchange="jumpToEditPage()" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--container-bg); color: var(--text-main);"></select>
+                    <button class="btn btn-secondary" onclick="nextEditPage()" id="edit-next-btn" disabled>Next →</button>
+                    <span id="edit-page-info" style="padding: 8px; color: var(--text-muted);"></span>
+                </div>
+
+                <div id="pdf-canvas-container" style="border: 2px solid #667eea; border-radius: 8px; overflow: auto; max-height: 600px; position: relative; background: var(--item-bg);">
+                    <canvas id="editfields-canvas" style="display: block; margin: 0 auto;"></canvas>
+                </div>
+
+                <div style="margin-top: 15px; padding: 15px; background: var(--upload-bg); border-radius: 8px;">
+                    <p style="margin-bottom: 10px; color: var(--text-main); font-weight: 600;">✏️ Instructions:</p>
+                    <ul style="margin: 0; padding-left: 20px; color: var(--text-muted); font-size: 0.95em;">
+                        <li>Click on any field or text area in the form above</li>
+                        <li>Type your text in the input field below</li>
+                        <li>Adjust font size and color if needed</li>
+                        <li>Click "Add Text" to place it on the PDF</li>
+                    </ul>
+                </div>
+
+                <div class="option-group">
+                    <label>Text to Add:</label>
+                    <input type="text" id="editfields-text-input" placeholder="Click on a field, then type here...">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="option-group">
+                        <label>Font Size:</label>
+                        <input type="number" id="editfields-fontsize" min="8" max="72" value="11">
+                    </div>
+                    <div class="option-group">
+                        <label>Text Color:</label>
+                        <input type="color" id="editfields-color" value="#000000" style="height: 45px; cursor: pointer;">
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="addTextAtClickedPosition()" id="editfields-add-btn" disabled>Add Text to Form</button>
+                <button class="btn btn-primary" onclick="saveAnnotatedForm()" id="editfields-save-btn" disabled>Save Edited PDF</button>
+                <button class="btn btn-secondary" onclick="clearEditFieldsFile()">Clear</button>
+            </div>
+
+            <div class="status" id="editfields-status"></div>
+        </div>
+
+        <!-- Add Text Tab -->
+        <div id="addtext" class="tab-content">
+            <h2>Add Text to PDF</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Add custom text annotations to any page of your PDF.</p>
+            
+            <div class="upload-area" onclick="document.getElementById('addtext-file').click()">
+                <div class="upload-icon">📝</div>
+                <p>Click to upload or drag & drop</p>
+                <small>Select a PDF file</small>
+                <input type="file" id="addtext-file" accept=".pdf" onchange="handleAddTextFile(event)">
+            </div>
+
+            <div id="addtext-info"></div>
+
+            <div class="option-group">
+                <label>Select Page:</label>
+                <select id="addtext-page" onchange="updatePagePreview()"></select>
+            </div>
+
+            <div class="option-group">
+                <label>Text Content:</label>
+                <textarea id="addtext-content" placeholder="Enter the text you want to add..." style="height: 100px; font-family: Arial, sans-serif;"></textarea>
+            </div>
+
+            <div class="option-group">
+                <label>Font Size:</label>
+                <input type="number" id="addtext-fontsize" min="8" max="72" value="12">
+            </div>
+
+            <div class="option-group">
+                <label>Position - X (Left, pixels):</label>
+                <input type="number" id="addtext-x" min="0" value="50">
+            </div>
+
+            <div class="option-group">
+                <label>Position - Y (Top, pixels):</label>
+                <input type="number" id="addtext-y" min="0" value="50">
+            </div>
+
+            <div class="option-group">
+                <label>Text Color:</label>
+                <input type="color" id="addtext-color" value="#000000" style="height: 50px; cursor: pointer;">
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="addTextToPDF()" id="addtext-btn" disabled>Add Text & Save</button>
+                <button class="btn btn-secondary" onclick="clearAddTextFile()">Clear</button>
+            </div>
+
+            <div class="status" id="addtext-status"></div>
+        </div>
+
+        <!-- Remove Password Tab -->
+        <div id="removepw" class="tab-content">
+            <h2>Remove Password</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Unlock a password-protected PDF and save a clean copy.</p>
+
+            <div class="upload-area" onclick="document.getElementById('removepw-file').click()">
+                <div class="upload-icon">🔓</div>
+                <p>Click to upload or drag & drop</p>
+                <small>Select a password-protected PDF</small>
+                <input type="file" id="removepw-file" accept=".pdf" onchange="handleRemovePasswordFile(event)">
+            </div>
+
+            <div id="removepw-info"></div>
+
+            <div class="option-group">
+                <label>PDF Password:</label>
+                <div style="display: flex; gap: 8px; align-items: stretch;">
+                    <input type="password" id="removepw-password" placeholder="Enter the PDF's password" style="flex-grow: 1; margin-bottom: 0;">
+                    <button type="button" class="btn btn-secondary" onclick="toggleRemovePasswordVisibility(this)" style="white-space: nowrap;">Show</button>
+                </div>
+                <p class="help-text">Leave blank if the PDF only has printing/editing restrictions.</p>
+            </div>
+
+            <div class="option-group">
+                <label>Output Quality:</label>
+                <select id="removepw-quality">
+                    <option value="1.5">Standard (smaller file, faster)</option>
+                    <option value="2" selected>High (recommended)</option>
+                    <option value="2.5">Very High (larger file, slower)</option>
+                </select>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="removePasswordFromPDF()" id="removepw-btn" disabled>Remove Password & Save</button>
+                <button class="btn btn-secondary" onclick="clearRemovePasswordFile()">Clear</button>
+            </div>
+
+            <div class="status" id="removepw-status"></div>
+        </div>
+
+        <!-- Metadata Editor Tab -->
+        <div id="metadata" class="tab-content">
+            <h2>Edit PDF Metadata</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Modify hidden PDF attributes like title, author, and keywords.</p>
+            <div class="upload-area" onclick="document.getElementById('meta-file').click()">
+                <div class="upload-icon">ℹ️</div>
+                <p>Upload PDF to edit metadata</p>
+                <input type="file" id="meta-file" accept=".pdf" onchange="handleMetaFile(event)">
+            </div>
+            <div id="meta-inputs" style="display: none; margin-top: 20px;">
+                <div class="option-group"><label>Title:</label><input type="text" id="meta-title"></div>
+                <div class="option-group"><label>Author:</label><input type="text" id="meta-author"></div>
+                <div class="option-group"><label>Subject:</label><input type="text" id="meta-subject"></div>
+                <div class="option-group"><label>Keywords:</label><input type="text" id="meta-keywords"></div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="saveMetadata()">Save Metadata</button>
+                    <button class="btn btn-secondary" onclick="clearMetaFile()">Clear</button>
+                </div>
+            </div>
+            <div class="status" id="meta-status"></div>
+        </div>
+
+        <!-- Images to PDF Tab -->
+        <div id="convert" class="tab-content">
+            <h2>Images to PDF</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Convert and combine multiple image files into a single PDF document.</p>
+            <div class="upload-area" onclick="document.getElementById('img-file').click()">
+                <div class="upload-icon">🖼️</div>
+                <p>Upload Images (JPG/PNG)</p>
+                <small>Select multiple images</small>
+                <input type="file" id="img-file" accept=".jpg,.jpeg,.png" multiple onchange="handleImageFiles(event)">
+            </div>
+            <div id="img-list" class="file-list"></div>
+            <div class="action-buttons">
+                <button class="btn btn-primary" id="img-btn" onclick="imagesToPdf()" disabled>Convert to PDF</button>
+                <button class="btn btn-secondary" onclick="clearImageFiles()">Clear</button>
+            </div>
+            <div class="status" id="convert-status"></div>
+        </div>
+
+        <!-- Watermark & Page Numbers Tab -->
+        <div id="watermark" class="tab-content">
+            <h2>Watermark & Page Numbers</h2>
+            <p style="margin: 15px 0; color: var(--text-muted);">Add custom watermarks across all pages and append automated page numbers.</p>
+            <div class="upload-area" onclick="document.getElementById('wm-file').click()">
+                <div class="upload-icon">©️</div>
+                <p>Upload PDF</p>
+                <input type="file" id="wm-file" accept=".pdf" onchange="handleWmFile(event)">
+            </div>
+            <div id="wm-info"></div>
+            <div class="option-group">
+                <label>Watermark Text (Optional):</label>
+                <input type="text" id="wm-text" placeholder="e.g., CONFIDENTIAL">
+            </div>
+            <div class="option-group">
+                <label>Include Page Numbers?</label>
+                <select id="wm-pages">
+                    <option value="none">No</option>
+                    <option value="bottom">Yes (Bottom Center)</option>
+                </select>
+            </div>
+            <div class="action-buttons">
+                <button class="btn btn-primary" id="wm-btn" onclick="applyWatermark()" disabled>Apply & Save</button>
+                <button class="btn btn-secondary" onclick="clearWmFile()">Clear</button>
+            </div>
+            <div class="status" id="wm-status"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // Global state
+        let mergeFiles = [];
+        let currentPDF = null;
+        let selectedPages = new Set();
+        let reorderSequence = [];
+        let formFields = [];
+        let formFieldValues = {};
+        let textAddPDF = null;
+        let editFieldsPDF = null;
+        let editFieldsCurrentPage = 0;
+        let editFieldsAnnotations = [];
+        let editFieldsClickedPos = null;
+        let editFieldsPDFJSDoc = null;
+        
+        // Set up PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Shared helper
+        async function renderThumbnailInto(pdfJsDoc, pageNum, containerEl) {
+            try {
+                const page = await pdfJsDoc.getPage(pageNum);
+                const baseViewport = page.getViewport({ scale: 1 });
+                const targetHeight = 150;
+                const scale = targetHeight / baseViewport.height;
+                const viewport = page.getViewport({ scale: scale });
+
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                const ctx = canvas.getContext('2d');
+
+                await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+                containerEl.classList.remove('thumb-loading');
+                containerEl.innerHTML = '';
+                containerEl.appendChild(canvas);
+            } catch (error) {
+                console.error(`Error rendering thumbnail for page ${pageNum}:`, error);
+                containerEl.textContent = '📄';
+            }
+        }
+
+        async function renderAllThumbnails(file, containerId) {
+            try {
+                const buffer = await file.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument({ data: buffer });
+                const pdfJsDoc = await loadingTask.promise;
+
+                const previews = document.querySelectorAll(`#${containerId} .page-preview`);
+                previews.forEach(el => {
+                    const pageNum = parseInt(el.dataset.pageNum);
+                    if (pageNum) {
+                        renderThumbnailInto(pdfJsDoc, pageNum, el);
+                    }
+                });
+            } catch (error) {
+                console.error('Error rendering thumbnails:', error);
+            }
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Fix Drag and Drop Routing
+        document.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if(e.target.closest('.upload-area')) e.target.closest('.upload-area').classList.add('dragover');
+        });
+
+        document.addEventListener('dragleave', (e) => {
+            if(e.target.closest('.upload-area')) e.target.closest('.upload-area').classList.remove('dragover');
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const dropArea = e.target.closest('.upload-area');
+            if (dropArea) {
+                dropArea.classList.remove('dragover');
+                const fileInput = dropArea.querySelector('input[type="file"]');
+                if (fileInput && e.dataTransfer.files.length > 0) {
+                    fileInput.files = e.dataTransfer.files;
+                    const event = new Event('change', { bubbles: true });
+                    fileInput.dispatchEvent(event);
+                }
+            }
+        });
+
+        // Merge functionality
+        function handleMergeFiles(event) {
+            const files = Array.from(event.target.files);
+            mergeFiles = [...mergeFiles, ...files];
+            displayMergeFiles();
+            document.getElementById('merge-btn').disabled = mergeFiles.length < 2;
+        }
+
+        function displayMergeFiles() {
+            const list = document.getElementById('merge-list');
+            list.innerHTML = '';
+            
+            mergeFiles.forEach((file, index) => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.innerHTML = `
+                    <span class="file-item-name">${index + 1}. ${file.name}</span>
+                    <button class="btn-remove" onclick="removeMergeFile(${index})">Remove</button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function removeMergeFile(index) {
+            mergeFiles.splice(index, 1);
+            displayMergeFiles();
+            document.getElementById('merge-btn').disabled = mergeFiles.length < 2;
+        }
+
+        function clearMergeFiles() {
+            mergeFiles = [];
+            currentPDF = null;
+            document.getElementById('merge-files').value = '';
+            document.getElementById('merge-list').innerHTML = '';
+            document.getElementById('merge-btn').disabled = true;
+            document.getElementById('merge-status').style.display = 'none';
+        }
+
+        async function mergePDFs() {
+            if (mergeFiles.length < 2) {
+                showStatus('merge-status', 'Please upload at least 2 PDFs', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('merge-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Merging...';
+
+            try {
+                const mergedPdf = await PDFLib.PDFDocument.create();
+
+                for (const file of mergeFiles) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    const pdf = await PDFLib.PDFDocument.load(uint8Array);
+                    const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                    copiedPages.forEach((page) => mergedPdf.addPage(page));
+                }
+
+                const pdfBytes = await mergedPdf.save();
+                downloadPDF(pdfBytes, 'merged.pdf');
+                showStatus('merge-status', '✓ PDFs merged successfully!', 'success');
+            } catch (error) {
+                showStatus('merge-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Merge PDFs';
+            }
+        }
+
+        // Split functionality
+        let splitPageCount = 0;
+
+        function handleSplitFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                loadPDF(file, 'split-info', 'split-btn', 'split');
+                document.getElementById('split-options').style.display = 'block';
+                updateSplitModeUI();
+            }
+        }
+
+        function updateSplitModeUI() {
+            const mode = document.getElementById('split-mode').value;
+            document.getElementById('split-range-opts').style.display = mode === 'range' ? 'block' : 'none';
+            document.getElementById('split-everyn-opts').style.display = mode === 'every-n' ? 'block' : 'none';
+            document.getElementById('split-custom-opts').style.display = mode === 'custom' ? 'block' : 'none';
+            document.getElementById('split-oddeven-opts').style.display = mode === 'odd-even' ? 'block' : 'none';
+            document.getElementById('split-half-opts').style.display = mode === 'half' ? 'block' : 'none';
+        }
+
+        function clearSplitFile() {
+            document.getElementById('split-file').value = '';
+            document.getElementById('split-info').innerHTML = '';
+            document.getElementById('split-options').style.display = 'none';
+            document.getElementById('split-range-input').value = '';
+            document.getElementById('split-everyn-input').value = '2';
+            document.getElementById('split-custom-input').value = '';
+            document.getElementById('split-mode').value = 'all';
+            document.getElementById('split-btn').disabled = true;
+            document.getElementById('split-status').style.display = 'none';
+            splitPageCount = 0;
+            currentPDF = null;
+        }
+
+        async function makeSplitPdfFromIndices(sourcePdf, indices) {
+            const newPdf = await PDFLib.PDFDocument.create();
+            const copiedPages = await newPdf.copyPages(sourcePdf, indices);
+            copiedPages.forEach(page => newPdf.addPage(page));
+            return await newPdf.save();
+        }
+
+        async function splitPDF() {
+            const file = document.getElementById('split-file').files[0];
+            if (!file) return;
+
+            const btn = document.getElementById('split-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Splitting...';
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const pdf = await PDFLib.PDFDocument.load(uint8Array);
+                const pageCount = pdf.getPageCount();
+                const mode = document.getElementById('split-mode').value;
+
+                if (mode === 'all') {
+                    for (let i = 0; i < pageCount; i++) {
+                        const pdfBytes = await makeSplitPdfFromIndices(pdf, [i]);
+                        downloadPDF(pdfBytes, `page_${i + 1}.pdf`);
+                    }
+                    showStatus('split-status', `✓ PDF split into ${pageCount} separate pages!`, 'success');
+
+                } else if (mode === 'range') {
+                    const rangeStr = document.getElementById('split-range-input').value.trim();
+                    const indices = parsePageNumbers(rangeStr, pageCount).map(p => p - 1);
+                    if (indices.length === 0) {
+                        showStatus('split-status', 'Please enter a valid page range', 'error');
+                        return;
+                    }
+                    const pdfBytes = await makeSplitPdfFromIndices(pdf, indices);
+                    downloadPDF(pdfBytes, `pages_${rangeStr.replace(/\s/g, '')}.pdf`);
+                    showStatus('split-status', `✓ Extracted pages ${rangeStr} into one file!`, 'success');
+
+                } else if (mode === 'every-n') {
+                    const n = parseInt(document.getElementById('split-everyn-input').value);
+                    if (!n || n < 1) {
+                        showStatus('split-status', 'Please enter a valid number of pages per file', 'error');
+                        return;
+                    }
+                    let fileCount = 0;
+                    for (let start = 0; start < pageCount; start += n) {
+                        const end = Math.min(start + n, pageCount);
+                        const indices = [];
+                        for (let i = start; i < end; i++) indices.push(i);
+                        const pdfBytes = await makeSplitPdfFromIndices(pdf, indices);
+                        fileCount++;
+                        downloadPDF(pdfBytes, `chunk_${fileCount}_pages_${start + 1}-${end}.pdf`);
+                    }
+                    showStatus('split-status', `✓ Split into ${fileCount} files of up to ${n} pages each!`, 'success');
+
+                } else if (mode === 'custom') {
+                    const customStr = document.getElementById('split-custom-input').value.trim();
+                    if (!customStr) {
+                        showStatus('split-status', 'Please enter custom ranges', 'error');
+                        return;
+                    }
+                    const ranges = customStr.split(',').map(r => r.trim()).filter(r => r.length > 0);
+                    let fileCount = 0;
+                    for (const range of ranges) {
+                        const indices = parsePageNumbers(range, pageCount).map(p => p - 1);
+                        if (indices.length === 0) continue;
+                        const pdfBytes = await makeSplitPdfFromIndices(pdf, indices);
+                        fileCount++;
+                        downloadPDF(pdfBytes, `range_${fileCount}_pages_${range.replace(/\s/g, '')}.pdf`);
+                    }
+                    showStatus('split-status', `✓ Created ${fileCount} file(s) from custom ranges!`, 'success');
+
+                } else if (mode === 'odd-even') {
+                    const choice = document.getElementById('split-oddeven-input').value;
+                    const oddIndices = [];
+                    const evenIndices = [];
+                    for (let i = 0; i < pageCount; i++) {
+                        if ((i + 1) % 2 === 1) oddIndices.push(i);
+                        else evenIndices.push(i);
+                    }
+                    if (choice === 'odd' || choice === 'both') {
+                        if (oddIndices.length > 0) {
+                            const pdfBytes = await makeSplitPdfFromIndices(pdf, oddIndices);
+                            downloadPDF(pdfBytes, 'odd_pages.pdf');
+                        }
+                    }
+                    if (choice === 'even' || choice === 'both') {
+                        if (evenIndices.length > 0) {
+                            const pdfBytes = await makeSplitPdfFromIndices(pdf, evenIndices);
+                            downloadPDF(pdfBytes, 'even_pages.pdf');
+                        }
+                    }
+                    showStatus('split-status', `✓ Odd/Even split complete!`, 'success');
+
+                } else if (mode === 'half') {
+                    const mid = Math.ceil(pageCount / 2);
+                    const firstHalf = [];
+                    const secondHalf = [];
+                    for (let i = 0; i < mid; i++) firstHalf.push(i);
+                    for (let i = mid; i < pageCount; i++) secondHalf.push(i);
+
+                    const firstBytes = await makeSplitPdfFromIndices(pdf, firstHalf);
+                    downloadPDF(firstBytes, 'first_half.pdf');
+
+                    if (secondHalf.length > 0) {
+                        const secondBytes = await makeSplitPdfFromIndices(pdf, secondHalf);
+                        downloadPDF(secondBytes, 'second_half.pdf');
+                    }
+                    showStatus('split-status', `✓ Split into two halves!`, 'success');
+                }
+            } catch (error) {
+                showStatus('split-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Split PDF';
+            }
+        }
+
+        // Extract functionality
+        function handleExtractFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                loadPDFForExtract(file);
+            }
+        }
+
+        async function loadPDFForExtract(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const pdf = await PDFLib.PDFDocument.load(uint8Array);
+                const pageCount = pdf.getPageCount();
+
+                const thumbsContainer = document.getElementById('extract-thumbs');
+                thumbsContainer.innerHTML = '';
+                selectedPages.clear();
+
+                for (let i = 0; i < pageCount; i++) {
+                    const pageDiv = document.createElement('div');
+                    pageDiv.className = 'page-thumbnail';
+                    pageDiv.onclick = () => togglePageSelection(i + 1, pageDiv);
+                    
+                    // A11y
+                    pageDiv.setAttribute('tabindex', '0');
+                    pageDiv.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            pageDiv.click();
+                        }
+                    });
+
+                    pageDiv.innerHTML = `
+                        <div class="page-preview thumb-loading" data-page-num="${i + 1}">Loading...</div>
+                        <div class="page-label">Page ${i + 1}</div>
+                        <input type="checkbox" class="page-checkbox" id="page-${i}">
+                    `;
+                    thumbsContainer.appendChild(pageDiv);
+                }
+
+                document.getElementById('extract-btn').disabled = false;
+                currentPDF = pdf;
+                renderAllThumbnails(file, 'extract-thumbs');
+            } catch (error) {
+                showStatus('extract-status', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        function togglePageSelection(pageNum, element) {
+            const nowSelected = !selectedPages.has(pageNum);
+            if (nowSelected) {
+                selectedPages.add(pageNum);
+            } else {
+                selectedPages.delete(pageNum);
+            }
+            element.classList.toggle('selected', nowSelected);
+            const checkbox = element.querySelector('input[type="checkbox"]');
+            if (checkbox) checkbox.checked = nowSelected;
+        }
+
+        function clearExtractFile() {
+            document.getElementById('extract-file').value = '';
+            document.getElementById('extract-thumbs').innerHTML = '';
+            document.getElementById('extract-pages').value = '';
+            document.getElementById('extract-btn').disabled = true;
+            document.getElementById('extract-status').style.display = 'none';
+            selectedPages.clear();
+            currentPDF = null;
+        }
+
+        async function extractPages() {
+            if (!currentPDF) return;
+
+            let pages = Array.from(selectedPages).sort((a, b) => a - b);
+
+            const inputPages = document.getElementById('extract-pages').value.trim();
+            if (inputPages) {
+                pages = parsePageNumbers(inputPages, currentPDF.getPageCount());
+            }
+
+            if (pages.length === 0) {
+                showStatus('extract-status', 'Please select or specify pages to extract', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('extract-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Extracting...';
+
+            try {
+                const file = document.getElementById('extract-file').files[0];
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const pdf = await PDFLib.PDFDocument.load(uint8Array);
+
+                const newPdf = await PDFLib.PDFDocument.create();
+                for (const pageNum of pages) {
+                    if (pageNum >= 1 && pageNum <= pdf.getPageCount()) {
+                        const [copiedPage] = await newPdf.copyPages(pdf, [pageNum - 1]);
+                        newPdf.addPage(copiedPage);
+                    }
+                }
+
+                const pdfBytes = await newPdf.save();
+                downloadPDF(pdfBytes, 'extracted.pdf');
+                showStatus('extract-status', `✓ Extracted ${pages.length} page(s) successfully!`, 'success');
+            } catch (error) {
+                showStatus('extract-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Extract Selected';
+            }
+        }
+
+        // Rotate functionality
+        function handleRotateFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                loadPDFForRotate(file);
+            }
+        }
+
+        async function loadPDFForRotate(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const pdf = await PDFLib.PDFDocument.load(uint8Array);
+                const pageCount = pdf.getPageCount();
+
+                const thumbsContainer = document.getElementById('rotate-thumbs');
+                thumbsContainer.innerHTML = '';
+                selectedPages.clear();
+
+                for (let i = 0; i < pageCount; i++) {
+                    const pageDiv = document.createElement('div');
+                    pageDiv.className = 'page-thumbnail';
+                    pageDiv.onclick = () => togglePageSelection(i + 1, pageDiv);
+                    
+                    // A11y
+                    pageDiv.setAttribute('tabindex', '0');
+                    pageDiv.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            pageDiv.click();
+                        }
+                    });
+
+                    pageDiv.innerHTML = `
+                        <div class="page-preview thumb-loading" data-page-num="${i + 1}">Loading...</div>
+                        <div class="page-label">Page ${i + 1}</div>
+                        <input type="checkbox" class="page-checkbox" id="rpage-${i}">
+                    `;
+                    thumbsContainer.appendChild(pageDiv);
+                }
+
+                document.getElementById('rotate-btn').disabled = false;
+                currentPDF = pdf;
+                renderAllThumbnails(file, 'rotate-thumbs');
+            } catch (error) {
+                showStatus('rotate-status', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        function clearRotateFile() {
+            document.getElementById('rotate-file').value = '';
+            document.getElementById('rotate-thumbs').innerHTML = '';
+            document.getElementById('rotate-btn').disabled = true;
+            document.getElementById('rotate-status').style.display = 'none';
+            selectedPages.clear();
+            currentPDF = null;
+        }
+
+        async function rotatePages() {
+            if (!currentPDF || selectedPages.size === 0) {
+                showStatus('rotate-status', 'Please select pages to rotate', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('rotate-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Rotating...';
+
+            try {
+                const file = document.getElementById('rotate-file').files[0];
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const pdf = await PDFLib.PDFDocument.load(uint8Array);
+                const angle = parseInt(document.getElementById('rotate-angle').value);
+
+                for (const pageNum of selectedPages) {
+                    const page = pdf.getPage(pageNum - 1);
+                    page.setRotation(PDFLib.degrees(page.getRotation().angle + angle));
+                }
+
+                const pdfBytes = await pdf.save();
+                downloadPDF(pdfBytes, 'rotated.pdf');
+                showStatus('rotate-status', `✓ Rotated ${selectedPages.size} page(s) successfully!`, 'success');
+            } catch (error) {
+                showStatus('rotate-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Rotate Selected';
+            }
+        }
+
+        // Delete functionality
+        function handleDeleteFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                loadPDFForDelete(file);
+            }
+        }
+
+        async function loadPDFForDelete(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const pdf = await PDFLib.PDFDocument.load(uint8Array);
+                const pageCount = pdf.getPageCount();
+
+                const thumbsContainer = document.getElementById('delete-thumbs');
+                thumbsContainer.innerHTML = '';
+                selectedPages.clear();
+
+                for (let i = 0; i < pageCount; i++) {
+                    const pageDiv = document.createElement('div');
+                    pageDiv.className = 'page-thumbnail';
+                    pageDiv.onclick = () => togglePageSelection(i + 1, pageDiv);
+                    
+                    // A11y
+                    pageDiv.setAttribute('tabindex', '0');
+                    pageDiv.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            pageDiv.click();
+                        }
+                    });
+
+                    pageDiv.innerHTML = `
+                        <div class="page-preview thumb-loading" data-page-num="${i + 1}">Loading...</div>
+                        <div class="page-label">Page ${i + 1}</div>
+                        <input type="checkbox" class="page-checkbox" id="dpage-${i}">
+                    `;
+                    thumbsContainer.appendChild(pageDiv);
+                }
+
+                document.getElementById('delete-btn').disabled = false;
+                currentPDF = pdf;
+                renderAllThumbnails(file, 'delete-thumbs');
+            } catch (error) {
+                showStatus('delete-status', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        function clearDeleteFile() {
+            document.getElementById('delete-file').value = '';
+            document.getElementById('delete-thumbs').innerHTML = '';
+            document.getElementById('delete-pages').value = '';
+            document.getElementById('delete-btn').disabled = true;
+            document.getElementById('delete-status').style.display = 'none';
+            selectedPages.clear();
+            currentPDF = null;
+        }
+
+        async function deletePages() {
+            if (!currentPDF) return;
+
+            let pages = Array.from(selectedPages).sort((a, b) => b - a);
+
+            const inputPages = document.getElementById('delete-pages').value.trim();
+            if (inputPages) {
+                pages = parsePageNumbers(inputPages, currentPDF.getPageCount()).sort((a, b) => b - a);
+            }
+
+            if (pages.length === 0) {
+                showStatus('delete-status', 'Please select or specify pages to delete', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('delete-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Deleting...';
+
+            try {
+                const file = document.getElementById('delete-file').files[0];
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const pdf = await PDFLib.PDFDocument.load(uint8Array);
+
+                for (const pageNum of pages) {
+                    if (pageNum >= 1 && pageNum <= pdf.getPageCount()) {
+                        pdf.removePage(pageNum - 1);
+                    }
+                }
+
+                const pdfBytes = await pdf.save();
+                downloadPDF(pdfBytes, 'edited.pdf');
+                showStatus('delete-status', `✓ Deleted ${pages.length} page(s) successfully!`, 'success');
+            } catch (error) {
+                showStatus('delete-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Delete Selected Pages';
+            }
+        }
+
+        // Reorder functionality
+        function handleReorderFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                loadPDFForReorder(file);
+            }
+        }
+
+        async function loadPDFForReorder(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const pdf = await PDFLib.PDFDocument.load(uint8Array);
+                const pageCount = pdf.getPageCount();
+
+                reorderSequence = [];
+                document.getElementById('reorder-order').value = '';
+                buildReorderGrid(pageCount);
+
+                document.getElementById('reorder-btn').disabled = false;
+                currentPDF = pdf;
+                renderAllThumbnails(file, 'reorder-thumbs');
+            } catch (error) {
+                showStatus('reorder-status', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        function buildReorderGrid(pageCount) {
+            const thumbsContainer = document.getElementById('reorder-thumbs');
+            thumbsContainer.innerHTML = '';
+
+            for (let i = 1; i <= pageCount; i++) {
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page-thumbnail';
+                pageDiv.dataset.pageNum = i;
+                pageDiv.style.position = 'relative';
+                pageDiv.onclick = () => toggleReorderPage(i);
+                
+                // A11y
+                pageDiv.setAttribute('tabindex', '0');
+                pageDiv.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        pageDiv.click();
+                    }
+                });
+
+                pageDiv.innerHTML = `
+                    <div class="reorder-badge" style="display:none; position:absolute; top:6px; right:6px; background:#667eea; color:#fff; border-radius:50%; width:26px; height:26px; align-items:center; justify-content:center; font-weight:700; font-size:0.85em;"></div>
+                    <div class="page-preview thumb-loading" data-page-num="${i}">Loading...</div>
+                    <div class="page-label">Page ${i}</div>
+                `;
+                thumbsContainer.appendChild(pageDiv);
+            }
+        }
+
+        function updateReorderBadges() {
+            const thumbsContainer = document.getElementById('reorder-thumbs');
+            const tiles = thumbsContainer.querySelectorAll('.page-thumbnail');
+            tiles.forEach(tile => {
+                const pageNum = parseInt(tile.dataset.pageNum);
+                const position = reorderSequence.indexOf(pageNum);
+                const badge = tile.querySelector('.reorder-badge');
+
+                if (position >= 0) {
+                    tile.classList.add('selected');
+                    if (badge) {
+                        badge.style.display = 'flex';
+                        badge.textContent = position + 1;
+                    }
+                } else {
+                    tile.classList.remove('selected');
+                    if (badge) {
+                        badge.style.display = 'none';
+                        badge.textContent = '';
+                    }
+                }
+            });
+        }
+
+        function toggleReorderPage(pageNum) {
+            const existingIndex = reorderSequence.indexOf(pageNum);
+            if (existingIndex >= 0) {
+                reorderSequence.splice(existingIndex, 1);
+            } else {
+                reorderSequence.push(pageNum);
+            }
+
+            document.getElementById('reorder-order').value = reorderSequence.join(',');
+            updateReorderBadges();
+        }
+
+        function resetReorderSequence() {
+            if (!currentPDF) return;
+            reorderSequence = [];
+            document.getElementById('reorder-order').value = '';
+            updateReorderBadges();
+        }
+
+        function syncReorderInputToThumbs() {
+            if (!currentPDF) return;
+            const raw = document.getElementById('reorder-order').value;
+            reorderSequence = parseReorderSequence(raw, currentPDF.getPageCount());
+            updateReorderBadges();
+        }
+
+        function clearReorderFile() {
+            document.getElementById('reorder-file').value = '';
+            document.getElementById('reorder-thumbs').innerHTML = '';
+            document.getElementById('reorder-order').value = '';
+            document.getElementById('reorder-btn').disabled = true;
+            document.getElementById('reorder-status').style.display = 'none';
+            reorderSequence = [];
+            currentPDF = null;
+        }
+
+        function parseReorderSequence(input, maxPages) {
+            const parts = input.split(',').map(p => p.trim()).filter(p => p.length > 0);
+            const result = [];
+            for (const part of parts) {
+                const num = parseInt(part);
+                if (!isNaN(num) && num >= 1 && num <= maxPages) {
+                    result.push(num);
+                }
+            }
+            return result;
+        }
+
+        async function reorderPages() {
+            if (!currentPDF) return;
+
+            const inputOrder = document.getElementById('reorder-order').value.trim();
+            const pages = parseReorderSequence(inputOrder, currentPDF.getPageCount());
+
+            if (pages.length !== currentPDF.getPageCount()) {
+                showStatus('reorder-status', `Please specify all ${currentPDF.getPageCount()} pages in new order (you have ${pages.length})`, 'error');
+                return;
+            }
+
+            const btn = document.getElementById('reorder-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Reordering...';
+
+            try {
+                const file = document.getElementById('reorder-file').files[0];
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const pdf = await PDFLib.PDFDocument.load(uint8Array);
+
+                const indices = pages.map(p => p - 1);
+
+                const newPdf = await PDFLib.PDFDocument.create();
+                const copiedPages = await newPdf.copyPages(pdf, indices);
+                copiedPages.forEach(page => newPdf.addPage(page));
+
+                const pdfBytes = await newPdf.save();
+                downloadPDF(pdfBytes, 'reordered.pdf');
+                showStatus('reorder-status', '✓ Pages reordered successfully!', 'success');
+            } catch (error) {
+                showStatus('reorder-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Reorder Pages';
+            }
+        }
+
+        // Compress functionality (Dual Mode)
+        function handleCompressFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                document.getElementById('compress-info').innerHTML = `
+                    <div class="file-item">
+                        <span class="file-item-name">${file.name}</span>
+                        <span class="file-pages">${sizeMB} MB</span>
+                    </div>
+                `;
+                document.getElementById('compress-btn').disabled = false;
+            }
+        }
+
+        function clearCompressFile() {
+            document.getElementById('compress-file').value = '';
+            document.getElementById('compress-info').innerHTML = '';
+            document.getElementById('compress-btn').disabled = true;
+            document.getElementById('compress-status').style.display = 'none';
+        }
+
+        async function compressPDF() {
+            const file = document.getElementById('compress-file').files[0];
+            if (!file) return;
+            const level = document.getElementById('compress-level').value;
+            const btn = document.getElementById('compress-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Compressing...';
+
+            try {
+                const originalSize = file.size;
+
+                if (level === 'high') {
+                    // True compression: Render to canvas and rebuild as lower-res JPEGs
+                    const buffer = await file.arrayBuffer();
+                    const pdfJsDoc = await pdfjsLib.getDocument({ data: buffer }).promise;
+                    const newPdf = await PDFLib.PDFDocument.create();
+                    
+                    for (let i = 1; i <= pdfJsDoc.numPages; i++) {
+                        const page = await pdfJsDoc.getPage(i);
+                        const viewport = page.getViewport({ scale: 1.0 });
+                        const canvas = document.createElement('canvas');
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+                        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                        
+                        // Compress to 0.7 quality JPEG
+                        const jpegBytes = await (await fetch(canvas.toDataURL('image/jpeg', 0.7))).arrayBuffer();
+                        const jpgImage = await newPdf.embedJpg(jpegBytes);
+                        const newPage = newPdf.addPage([viewport.width, viewport.height]);
+                        newPage.drawImage(jpgImage, { x: 0, y: 0, width: viewport.width, height: viewport.height });
+                    }
+                    const pdfBytes = await newPdf.save();
+                    const reduction = (((originalSize - pdfBytes.length) / originalSize) * 100).toFixed(1);
+                    downloadPDF(pdfBytes, 'compressed_heavy.pdf');
+                    showStatus('compress-status', `✓ Compressed successfully! Original: ${(originalSize / 1024 / 1024).toFixed(2)} MB → New: ${(pdfBytes.length / 1024 / 1024).toFixed(2)} MB (${reduction}% reduction)`, 'success');
+                } else {
+                    // Standard metadata cleaning
+                    const buffer = await file.arrayBuffer();
+                    const pdf = await PDFLib.PDFDocument.load(buffer);
+                    const newPdf = await PDFLib.PDFDocument.create();
+                    const copiedPages = await newPdf.copyPages(pdf, pdf.getPageIndices());
+                    copiedPages.forEach(page => newPdf.addPage(page));
+                    
+                    const pdfBytes = await newPdf.save();
+                    const reduction = (((originalSize - pdfBytes.length) / originalSize) * 100).toFixed(1);
+                    downloadPDF(pdfBytes, 'compressed_clean.pdf');
+                    showStatus('compress-status', `✓ Optimized successfully! Original: ${(originalSize / 1024 / 1024).toFixed(2)} MB → New: ${(pdfBytes.length / 1024 / 1024).toFixed(2)} MB (${reduction}% reduction)`, 'success');
+                }
+            } catch (error) {
+                showStatus('compress-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Compress PDF';
+            }
+        }
+
+        // Edit Fields functionality - Visual Form Editor
+        async function handleEditFieldsFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                try {
+                    const pdfJsBuffer = await file.arrayBuffer();
+                    const pdfLibBuffer = await file.arrayBuffer();
+                    
+                    const loadingTask = pdfjsLib.getDocument({ data: pdfJsBuffer });
+                    editFieldsPDFJSDoc = await loadingTask.promise;
+                    const pageCount = editFieldsPDFJSDoc.numPages;
+
+                    editFieldsPDF = await PDFLib.PDFDocument.load(pdfLibBuffer);
+                    const form = editFieldsPDF.getForm();
+                    formFields = form.getFields();
+
+                    if (formFields.length > 0) {
+                        displayFormFields(formFields, form);
+                        document.getElementById('editfields-save-btn').disabled = false;
+                        showStatus('editfields-status', `✓ Found ${formFields.length} interactive form fields. Fill them out below.`, 'info');
+                    } else {
+                        editFieldsAnnotations = [];
+                        editFieldsCurrentPage = 0;
+                        
+                        const pageSelector = document.getElementById('editfields-page-selector');
+                        pageSelector.innerHTML = '';
+                        for (let i = 0; i < pageCount; i++) {
+                            const option = document.createElement('option');
+                            option.value = i;
+                            option.textContent = `Page ${i + 1}`;
+                            pageSelector.appendChild(option);
+                        }
+
+                        document.getElementById('editfields-viewer').style.display = 'block';
+                        document.getElementById('editfields-add-btn').disabled = false;
+                        document.getElementById('editfields-save-btn').disabled = false;
+                        
+                        renderEditFieldsPage();
+                        showStatus('editfields-status', `✓ Loaded ${pageCount}-page PDF. Click on form fields to add text.`, 'info');
+                    }
+
+                    document.getElementById('editfields-info').innerHTML = `
+                        <div class="file-item">
+                            <span class="file-item-name">${file.name}</span>
+                            <span class="file-pages">${pageCount} pages</span>
+                        </div>
+                    `;
+                } catch (error) {
+                    console.error('Error loading PDF:', error);
+                    showStatus('editfields-status', `Error: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        async function renderEditFieldsPage() {
+            if (!editFieldsPDFJSDoc || editFieldsCurrentPage >= editFieldsPDFJSDoc.numPages) return;
+
+            const canvas = document.getElementById('editfields-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            try {
+                const page = await editFieldsPDFJSDoc.getPage(editFieldsCurrentPage + 1);
+                const scale = 1.5;
+                const viewport = page.getViewport({ scale: scale });
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                canvas.pdfPageWidth = page.getViewport({ scale: 1 }).width;
+                canvas.pdfPageHeight = page.getViewport({ scale: 1 }).height;
+                canvas.renderScale = scale;
+
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                
+                await page.render(renderContext).promise;
+
+                editFieldsAnnotations
+                    .filter(ann => ann.page === editFieldsCurrentPage)
+                    .forEach(ann => {
+                        ctx.font = `${ann.size}px Arial`;
+                        ctx.fillStyle = ann.color;
+                        ctx.globalAlpha = 0.9;
+                        ctx.fillText(ann.text, ann.x, ann.y);
+                        ctx.globalAlpha = 1.0;
+                    });
+
+                canvas.onclick = (e) => handleCanvasClick(e, canvas);
+
+                document.getElementById('edit-page-info').textContent = `Page ${editFieldsCurrentPage + 1} of ${editFieldsPDFJSDoc.numPages}`;
+                document.getElementById('edit-prev-btn').disabled = editFieldsCurrentPage === 0;
+                document.getElementById('edit-next-btn').disabled = editFieldsCurrentPage >= editFieldsPDFJSDoc.numPages - 1;
+            } catch (error) {
+                console.error('Error rendering page:', error);
+                showStatus('editfields-status', 'Error rendering page: ' + error.message, 'error');
+            }
+        }
+
+        function handleCanvasClick(event, canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const canvasX = event.clientX - rect.left;
+            const canvasY = event.clientY - rect.top;
+            
+            const scale = canvas.renderScale || 1.5;
+            const pdfX = canvasX / scale;
+            const pdfY = canvasY / scale;
+            
+            editFieldsClickedPos = { 
+                x: canvasX,      
+                y: canvasY,
+                pdfX: pdfX,      
+                pdfY: pdfY,
+                page: editFieldsCurrentPage 
+            };
+            
+            document.getElementById('editfields-text-input').focus();
+            document.getElementById('editfields-text-input').placeholder = `Click position set! Type your text...`;
+            showStatus('editfields-status', `✓ Position selected. Type text and click "Add Text to Form"`, 'info');
+        }
+
+        function addTextAtClickedPosition() {
+            if (!editFieldsClickedPos) {
+                showStatus('editfields-status', 'Click on the form to select where to add text', 'error');
+                return;
+            }
+
+            const text = document.getElementById('editfields-text-input').value;
+            if (!text.trim()) {
+                showStatus('editfields-status', 'Please enter some text', 'error');
+                return;
+            }
+
+            const fontSize = parseInt(document.getElementById('editfields-fontsize').value);
+            const color = document.getElementById('editfields-color').value;
+
+            editFieldsAnnotations.push({
+                text: text,
+                x: editFieldsClickedPos.x,              
+                y: editFieldsClickedPos.y,
+                pdfX: editFieldsClickedPos.pdfX,       
+                pdfY: editFieldsClickedPos.pdfY,
+                page: editFieldsClickedPos.page,
+                size: fontSize,
+                color: color
+            });
+
+            document.getElementById('editfields-text-input').value = '';
+            editFieldsClickedPos = null;
+            renderEditFieldsPage();
+            showStatus('editfields-status', '✓ Text added! Add more or click "Save Edited PDF" when done.', 'success');
+        }
+
+        function previousEditPage() {
+            if (editFieldsCurrentPage > 0) {
+                editFieldsCurrentPage--;
+                document.getElementById('editfields-page-selector').value = editFieldsCurrentPage;
+                renderEditFieldsPage();
+            }
+        }
+
+        function nextEditPage() {
+            if (editFieldsPDFJSDoc && editFieldsCurrentPage < editFieldsPDFJSDoc.numPages - 1) {
+                editFieldsCurrentPage++;
+                document.getElementById('editfields-page-selector').value = editFieldsCurrentPage;
+                renderEditFieldsPage();
+            }
+        }
+
+        function jumpToEditPage() {
+            editFieldsCurrentPage = parseInt(document.getElementById('editfields-page-selector').value);
+            renderEditFieldsPage();
+        }
+
+        async function saveAnnotatedForm() {
+            if (!editFieldsPDF) {
+                showStatus('editfields-status', 'Please load a PDF first', 'error');
+                return;
+            }
+
+            if (editFieldsAnnotations.length === 0 && formFields.length === 0) {
+                showStatus('editfields-status', 'No changes made to save', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('editfields-save-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Saving...';
+
+            try {
+                let workingPDF = editFieldsPDF;
+
+                if (editFieldsAnnotations.length > 0) {
+                    editFieldsAnnotations.forEach(ann => {
+                        const page = workingPDF.getPage(ann.page);
+                        const { height } = page.getSize();
+                        const rgb = hexToRgb(ann.color);
+                        const textColor = PDFLib.rgb(rgb.r / 255, rgb.g / 255, rgb.b / 255);
+
+                        const xPos = ann.pdfX !== undefined ? ann.pdfX : ann.x;
+                        const yPos = ann.pdfY !== undefined ? ann.pdfY : ann.y;
+
+                        page.drawText(ann.text, {
+                            x: xPos,
+                            y: height - yPos - ann.size,
+                            size: ann.size,
+                            color: textColor,
+                        });
+                    });
+                }
+
+                // If form fields exist, also populate them before saving
+                if (formFields.length > 0) {
+                     formFields.forEach((field, index) => {
+                        const inputElement = document.getElementById(`field-${index}`);
+                        if (!inputElement) return;
+
+                        try {
+                            if (field.constructor.name.includes('Text')) {
+                                field.setText(inputElement.value);
+                            } else if (field.constructor.name.includes('CheckBox')) {
+                                if (inputElement.checked) field.check();
+                                else field.uncheck();
+                            } else if (field.constructor.name.includes('Dropdown')) {
+                                if (inputElement.value) field.select(inputElement.value);
+                            }
+                        } catch (e) {
+                            console.error('Error setting field:', e);
+                        }
+                    });
+                }
+
+                const pdfBytes = await workingPDF.save();
+                downloadPDF(pdfBytes, 'edited_form.pdf');
+                showStatus('editfields-status', `✓ PDF saved successfully!`, 'success');
+            } catch (error) {
+                showStatus('editfields-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Save Edited PDF';
+            }
+        }
+
+        function displayFormFields(fields, form) {
+            const container = document.getElementById('editfields-container') || document.createElement('div');
+            if (!document.getElementById('editfields-container')) {
+                container.id = 'editfields-container';
+                document.getElementById('editfields').insertBefore(container, document.getElementById('editfields-info').nextSibling);
+            }
+            container.innerHTML = '';
+
+            fields.forEach((field, index) => {
+                const fieldName = field.getName();
+                const fieldType = field.constructor.name;
+                let inputHTML = '';
+
+                try {
+                    if (fieldType.includes('Text')) {
+                        const currentValue = field.getText() || '';
+                        inputHTML = `<input type="text" id="field-${index}" value="${escapeHtml(currentValue)}" placeholder="Enter text" style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--container-bg); color: var(--text-main);">`;
+                    } else if (fieldType.includes('CheckBox')) {
+                        const isChecked = field.isChecked();
+                        inputHTML = `<input type="checkbox" id="field-${index}" ${isChecked ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;">`;
+                    } else if (fieldType.includes('Dropdown')) {
+                        const options = field.getOptions();
+                        const selectedValue = field.getValue();
+                        inputHTML = `<select id="field-${index}" style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--container-bg); color: var(--text-main);">
+                            <option value="">-- Select --</option>`;
+                        options.forEach(option => {
+                            inputHTML += `<option value="${escapeHtml(option.value)}" ${selectedValue === option.value ? 'selected' : ''}>${escapeHtml(option.displayValue)}</option>`;
+                        });
+                        inputHTML += '</select>';
+                    } else {
+                        inputHTML = `<input type="text" id="field-${index}" placeholder="Fill this field" style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--container-bg); color: var(--text-main);">`;
+                    }
+
+                    const fieldDiv = document.createElement('div');
+                    fieldDiv.className = 'option-group';
+                    fieldDiv.innerHTML = `
+                        <label>${escapeHtml(fieldName)}</label>
+                        ${inputHTML}
+                    `;
+                    container.appendChild(fieldDiv);
+                } catch (e) {
+                    console.error(`Error with field ${fieldName}:`, e);
+                }
+            });
+        }
+
+        function clearEditFieldsFile() {
+            document.getElementById('editfields-file').value = '';
+            document.getElementById('editfields-info').innerHTML = '';
+            const container = document.getElementById('editfields-container');
+            if (container) container.innerHTML = '';
+            document.getElementById('editfields-viewer').style.display = 'none';
+            document.getElementById('editfields-text-input').value = '';
+            document.getElementById('editfields-save-btn').disabled = true;
+            document.getElementById('editfields-add-btn').disabled = true;
+            document.getElementById('editfields-status').style.display = 'none';
+            formFields = [];
+            formFieldValues = {};
+            editFieldsPDF = null;
+            editFieldsPDFJSDoc = null;
+            editFieldsAnnotations = [];
+            editFieldsClickedPos = null;
+        }
+
+        // Add Text functionality
+        async function handleAddTextFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    textAddPDF = await PDFLib.PDFDocument.load(uint8Array);
+                    const pageCount = textAddPDF.getPageCount();
+
+                    const pageSelect = document.getElementById('addtext-page');
+                    pageSelect.innerHTML = '';
+                    for (let i = 0; i < pageCount; i++) {
+                        const option = document.createElement('option');
+                        option.value = i;
+                        option.textContent = `Page ${i + 1}`;
+                        pageSelect.appendChild(option);
+                    }
+
+                    document.getElementById('addtext-info').innerHTML = `
+                        <div class="file-item">
+                            <span class="file-item-name">${file.name}</span>
+                            <span class="file-pages">${pageCount} pages</span>
+                        </div>
+                    `;
+
+                    document.getElementById('addtext-btn').disabled = false;
+                } catch (error) {
+                    showStatus('addtext-status', `Error: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        function updatePagePreview() {
+            // Could add preview functionality here
+        }
+
+        async function addTextToPDF() {
+            if (!textAddPDF) {
+                showStatus('addtext-status', 'Please load a PDF first', 'error');
+                return;
+            }
+
+            const pageIndex = parseInt(document.getElementById('addtext-page').value);
+            const text = document.getElementById('addtext-content').value;
+            const fontSize = parseInt(document.getElementById('addtext-fontsize').value);
+            const x = parseInt(document.getElementById('addtext-x').value);
+            const y = parseInt(document.getElementById('addtext-y').value);
+            const color = document.getElementById('addtext-color').value;
+
+            if (!text.trim()) {
+                showStatus('addtext-status', 'Please enter some text', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('addtext-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Adding Text...';
+
+            try {
+                const page = textAddPDF.getPage(pageIndex);
+                const { height } = page.getSize();
+
+                const rgb = hexToRgb(color);
+                const textColor = PDFLib.rgb(rgb.r / 255, rgb.g / 255, rgb.b / 255);
+
+                page.drawText(text, {
+                    x: x,
+                    y: height - y - fontSize,
+                    size: fontSize,
+                    color: textColor,
+                });
+
+                const pdfBytes = await textAddPDF.save();
+                downloadPDF(pdfBytes, 'text_added.pdf');
+                showStatus('addtext-status', '✓ Text added and PDF saved successfully!', 'success');
+            } catch (error) {
+                showStatus('addtext-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Add Text & Save';
+            }
+        }
+
+        function clearAddTextFile() {
+            document.getElementById('addtext-file').value = '';
+            document.getElementById('addtext-info').innerHTML = '';
+            document.getElementById('addtext-page').innerHTML = '';
+            document.getElementById('addtext-content').value = '';
+            document.getElementById('addtext-fontsize').value = '12';
+            document.getElementById('addtext-x').value = '50';
+            document.getElementById('addtext-y').value = '50';
+            document.getElementById('addtext-color').value = '#000000';
+            document.getElementById('addtext-btn').disabled = true;
+            document.getElementById('addtext-status').style.display = 'none';
+            textAddPDF = null;
+        }
+
+        // Remove Password functionality
+        let removePasswordFile = null;
+
+        function handleRemovePasswordFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                removePasswordFile = file;
+                document.getElementById('removepw-info').innerHTML = `
+                    <div class="file-item">
+                        <span class="file-item-name">${file.name}</span>
+                        <span class="file-pages">${(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                    </div>
+                `;
+                document.getElementById('removepw-btn').disabled = false;
+                document.getElementById('removepw-status').style.display = 'none';
+            }
+        }
+
+        function toggleRemovePasswordVisibility(btn) {
+            const input = document.getElementById('removepw-password');
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = 'Hide';
+            } else {
+                input.type = 'password';
+                btn.textContent = 'Show';
+            }
+        }
+
+        function clearRemovePasswordFile() {
+            document.getElementById('removepw-file').value = '';
+            document.getElementById('removepw-info').innerHTML = '';
+            document.getElementById('removepw-password').value = '';
+            document.getElementById('removepw-quality').value = '2';
+            document.getElementById('removepw-btn').disabled = true;
+            document.getElementById('removepw-status').style.display = 'none';
+            removePasswordFile = null;
+        }
+
+        async function removePasswordFromPDF() {
+            if (!removePasswordFile) return;
+
+            const password = document.getElementById('removepw-password').value;
+            const qualityScale = parseFloat(document.getElementById('removepw-quality').value);
+
+            const btn = document.getElementById('removepw-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Opening PDF...';
+            showStatus('removepw-status', 'Opening PDF...', 'info');
+
+            try {
+                const buffer = await removePasswordFile.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument({
+                    data: buffer,
+                    password: password || undefined
+                });
+
+                let pdfJsDoc;
+                try {
+                    pdfJsDoc = await loadingTask.promise;
+                } catch (err) {
+                    if (err.name === 'PasswordException') {
+                        if (err.code === 1) {
+                            showStatus('removepw-status', '🔒 This PDF needs a password to open. Please enter it above.', 'error');
+                        } else {
+                            showStatus('removepw-status', '❌ Incorrect password. Please check it and try again.', 'error');
+                        }
+                        return;
+                    }
+                    throw err;
+                }
+
+                const pageCount = pdfJsDoc.numPages;
+                const newPdf = await PDFLib.PDFDocument.create();
+
+                for (let i = 1; i <= pageCount; i++) {
+                    btn.innerHTML = `<span class="loading"></span> Processing page ${i}/${pageCount}...`;
+                    showStatus('removepw-status', `Processing page ${i} of ${pageCount}...`, 'info');
+
+                    const page = await pdfJsDoc.getPage(i);
+                    const renderViewport = page.getViewport({ scale: qualityScale });
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = renderViewport.width;
+                    canvas.height = renderViewport.height;
+                    const ctx = canvas.getContext('2d');
+
+                    await page.render({ canvasContext: ctx, viewport: renderViewport }).promise;
+
+                    const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+                    const jpegBytes = await (await fetch(jpegDataUrl)).arrayBuffer();
+                    const jpgImage = await newPdf.embedJpg(jpegBytes);
+
+                    const baseViewport = page.getViewport({ scale: 1 });
+                    const newPage = newPdf.addPage([baseViewport.width, baseViewport.height]);
+                    newPage.drawImage(jpgImage, {
+                        x: 0,
+                        y: 0,
+                        width: baseViewport.width,
+                        height: baseViewport.height
+                    });
+                }
+
+                btn.innerHTML = '<span class="loading"></span> Saving...';
+                const pdfBytes = await newPdf.save();
+                downloadPDF(pdfBytes, 'unlocked.pdf');
+                showStatus('removepw-status', `✓ Password removed! Downloaded as unlocked.pdf (${pageCount} pages). Note: pages are now images, so text is no longer selectable/searchable.`, 'success');
+            } catch (error) {
+                console.error('Error removing password:', error);
+                showStatus('removepw-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Remove Password & Save';
+            }
+        }
+
+        // --- NEW FEATURES ---
+
+        // Dark Mode Toggle
+        function toggleTheme() {
+            const body = document.body;
+            const currentTheme = body.getAttribute('data-theme');
+            if (currentTheme === 'dark') {
+                body.removeAttribute('data-theme');
+            } else {
+                body.setAttribute('data-theme', 'dark');
+            }
+        }
+
+        // Metadata Editor
+        let metaPdf = null;
+        async function handleMetaFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const buffer = await file.arrayBuffer();
+                metaPdf = await PDFLib.PDFDocument.load(buffer);
+                document.getElementById('meta-title').value = metaPdf.getTitle() || '';
+                document.getElementById('meta-author').value = metaPdf.getAuthor() || '';
+                document.getElementById('meta-subject').value = metaPdf.getSubject() || '';
+                document.getElementById('meta-keywords').value = metaPdf.getKeywords() || '';
+                document.getElementById('meta-inputs').style.display = 'block';
+            }
+        }
+
+        function clearMetaFile() {
+            metaPdf = null;
+            document.getElementById('meta-file').value = '';
+            document.getElementById('meta-inputs').style.display = 'none';
+            document.getElementById('meta-status').style.display = 'none';
+        }
+
+        async function saveMetadata() {
+            if (!metaPdf) return;
+            metaPdf.setTitle(document.getElementById('meta-title').value);
+            metaPdf.setAuthor(document.getElementById('meta-author').value);
+            metaPdf.setSubject(document.getElementById('meta-subject').value);
+            metaPdf.setKeywords([document.getElementById('meta-keywords').value]);
+            const pdfBytes = await metaPdf.save();
+            downloadPDF(pdfBytes, 'metadata_updated.pdf');
+            showStatus('meta-status', '✓ Metadata updated!', 'success');
+        }
+
+        // Images to PDF
+        let imageFilesToConvert = [];
+        function handleImageFiles(event) {
+            imageFilesToConvert = Array.from(event.target.files);
+            document.getElementById('img-list').innerHTML = imageFilesToConvert.map(f => `<div class="file-item">${f.name}</div>`).join('');
+            document.getElementById('img-btn').disabled = imageFilesToConvert.length === 0;
+        }
+
+        function clearImageFiles() {
+            imageFilesToConvert = [];
+            document.getElementById('img-file').value = '';
+            document.getElementById('img-list').innerHTML = '';
+            document.getElementById('img-btn').disabled = true;
+            document.getElementById('convert-status').style.display = 'none';
+        }
+
+        async function imagesToPdf() {
+            const btn = document.getElementById('img-btn');
+            btn.innerHTML = '<span class="loading"></span> Converting...';
+            try {
+                const pdf = await PDFLib.PDFDocument.create();
+                for (const file of imageFilesToConvert) {
+                    const buffer = await file.arrayBuffer();
+                    let image;
+                    if (file.type === 'image/png') {
+                        image = await pdf.embedPng(buffer);
+                    } else {
+                        image = await pdf.embedJpg(buffer);
+                    }
+                    const page = pdf.addPage([image.width, image.height]);
+                    page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+                }
+                const pdfBytes = await pdf.save();
+                downloadPDF(pdfBytes, 'images_converted.pdf');
+                showStatus('convert-status', '✓ PDF created from images!', 'success');
+            } catch (e) {
+                showStatus('convert-status', 'Error: ' + e.message, 'error');
+            }
+            btn.innerHTML = 'Convert to PDF';
+        }
+
+        // Watermark & Page Numbers
+        let wmPdf = null;
+        async function handleWmFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const buffer = await file.arrayBuffer();
+                wmPdf = await PDFLib.PDFDocument.load(buffer);
+                
+                document.getElementById('wm-info').innerHTML = `
+                    <div class="file-item">
+                        <span class="file-item-name">${file.name}</span>
+                        <span class="file-pages">${wmPdf.getPageCount()} pages</span>
+                    </div>
+                `;
+                document.getElementById('wm-btn').disabled = false;
+            }
+        }
+
+        function clearWmFile() {
+            wmPdf = null;
+            document.getElementById('wm-file').value = '';
+            document.getElementById('wm-info').innerHTML = '';
+            document.getElementById('wm-text').value = '';
+            document.getElementById('wm-btn').disabled = true;
+            document.getElementById('wm-status').style.display = 'none';
+        }
+
+        async function applyWatermark() {
+            if (!wmPdf) return;
+            const btn = document.getElementById('wm-btn');
+            btn.innerHTML = '<span class="loading"></span> Applying...';
+            btn.disabled = true;
+
+            try {
+                const text = document.getElementById('wm-text').value;
+                const addPages = document.getElementById('wm-pages').value === 'bottom';
+                
+                const pages = wmPdf.getPages();
+                const { rgb, degrees } = PDFLib;
+
+                pages.forEach((page, idx) => {
+                    const { width, height } = page.getSize();
+                    
+                    if (text) {
+                        page.drawText(text, {
+                            x: width / 2 - 100,
+                            y: height / 2,
+                            size: 60,
+                            color: rgb(0.7, 0.7, 0.7),
+                            opacity: 0.3,
+                            rotate: degrees(45)
+                        });
+                    }
+
+                    if (addPages) {
+                        page.drawText(`Page ${idx + 1} of ${pages.length}`, {
+                            x: width / 2 - 30,
+                            y: 30,
+                            size: 12,
+                            color: rgb(0, 0, 0)
+                        });
+                    }
+                });
+
+                const pdfBytes = await wmPdf.save();
+                downloadPDF(pdfBytes, 'watermarked.pdf');
+                showStatus('wm-status', '✓ Document processed successfully!', 'success');
+            } catch (error) {
+                showStatus('wm-status', `Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Apply & Save';
+            }
+        }
+
+        // Utility functions
+        function parsePageNumbers(input, maxPages) {
+            const pages = [];
+            const parts = input.split(',').map(p => p.trim());
+
+            for (const part of parts) {
+                if (part.includes('-')) {
+                    const [start, end] = part.split('-').map(p => parseInt(p.trim()));
+                    for (let i = start; i <= end && i <= maxPages; i++) {
+                        if (i >= 1) pages.push(i);
+                    }
+                } else {
+                    const page = parseInt(part);
+                    if (page >= 1 && page <= maxPages) {
+                        pages.push(page);
+                    }
+                }
+            }
+            return [...new Set(pages)].sort((a, b) => a - b);
+        }
+
+        async function loadPDF(file, infoId, btnId, operation) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const pdf = await PDFLib.PDFDocument.load(uint8Array);
+                const pageCount = pdf.getPageCount();
+
+                document.getElementById(infoId).innerHTML = `
+                    <div class="file-item">
+                        <span class="file-item-name">${file.name}</span>
+                        <span class="file-pages">${pageCount} pages</span>
+                    </div>
+                `;
+
+                document.getElementById(btnId).disabled = false;
+                currentPDF = pdf;
+            } catch (error) {
+                showStatus(`${operation}-status`, `Error: ${error.message}`, 'error');
+            }
+        }
+
+        function downloadPDF(pdfBytes, filename) {
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        }
+
+        function showStatus(elementId, message, type) {
+            const status = document.getElementById(elementId);
+            status.className = `status ${type}`;
+            status.textContent = message;
+            status.style.display = 'block';
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 0, g: 0, b: 0 };
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
