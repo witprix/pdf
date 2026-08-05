@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optical Transfer (QR Code)</title>
+    
+    <!-- Library for generating QR Codes -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
+    <!-- Library for scanning QR Codes -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        @media (min-width: 600px) {
+            .container {
+                flex-direction: row;
+            }
+        }
+        .card {
+            flex: 1;
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        input[type="text"] {
+            width: 95%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #qrcode-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        #reader {
+            width: 100%;
+            margin-top: 15px;
+        }
+        .result-box {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 6px;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Optical Transfer Hub</h1>
+
+    <div class="container">
+        <!-- SENDER SECTION -->
+        <div class="card">
+            <h2>Send Data (Generate QR)</h2>
+            <p>Enter text, Wi-Fi credentials, or contact info to share visually.</p>
+            <input type="text" id="dataInput" placeholder="e.g., MySecretPassword123" />
+            <button onclick="generateQR()">Generate QR Code</button>
+            <div id="qrcode-container">
+                <div id="qrcode"></div>
+            </div>
+        </div>
+
+        <!-- RECEIVER SECTION -->
+        <div class="card">
+            <h2>Receive Data (Scan QR)</h2>
+            <p>Use your camera to scan a generated QR code from another screen.</p>
+            <button onclick="startScanner()">Start Camera</button>
+            <button onclick="stopScanner()" style="background-color: #dc3545;">Stop Camera</button>
+            
+            <div id="reader"></div>
+            
+            <div class="result-box">
+                <strong>Scanned Data:</strong>
+                <p id="scanResult">Waiting for scan...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- QR Code Generation Logic ---
+        let qrCodeInstance = null;
+
+        function generateQR() {
+            const data = document.getElementById("dataInput").value;
+            const qrContainer = document.getElementById("qrcode");
+            
+            if (!data) {
+                alert("Please enter some data to transfer.");
+                return;
+            }
+
+            // Clear previous QR code
+            qrContainer.innerHTML = "";
+            
+            // Generate new QR code
+            qrCodeInstance = new QRCode(qrContainer, {
+                text: data,
+                width: 256,
+                height: 256,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
+        }
+
+        // --- QR Code Scanning Logic ---
+        let html5QrcodeScanner = null;
+
+        function startScanner() {
+            if (html5QrcodeScanner) {
+                console.warn("Scanner is already running.");
+                return;
+            }
+
+            html5QrcodeScanner = new Html5Qrcode("reader");
+            
+            const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+                // Display the scanned result
+                document.getElementById("scanResult").innerText = decodedText;
+                
+                // Optionally stop scanning after a successful read
+                stopScanner();
+            };
+            
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            // Start the rear camera by default
+            html5QrcodeScanner.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
+            .catch((err) => {
+                alert("Error accessing camera. Please ensure permissions are granted.");
+                console.error(err);
+            });
+        }
+
+        function stopScanner() {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.stop().then((ignore) => {
+                    html5QrcodeScanner.clear();
+                    html5QrcodeScanner = null;
+                }).catch((err) => {
+                    console.error("Failed to stop scanner.", err);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
