@@ -21,7 +21,7 @@
         .btn-danger { background-color: #dc3545; }
         .btn-danger:hover { background-color: #c82333; }
         #qrcode-container { display: flex; justify-content: center; margin-top: 20px; min-height: 256px;}
-        .status { font-weight: bold; margin-top: 10px; color: #d9534f; text-align: center; }
+        .status { font-weight: bold; margin-top: 10px; text-align: center; }
         #reader { width: 100%; margin-top: 15px; }
         .progress-bar { width: 100%; background-color: #e0e0e0; border-radius: 4px; margin-top: 10px; overflow: hidden; display: none; }
         .progress-fill { height: 20px; background-color: #28a745; width: 0%; transition: width 0.2s; }
@@ -41,7 +41,7 @@
             <button class="btn" onclick="startBroadcast()">Start Broadcast</button>
             <button class="btn btn-danger" onclick="stopBroadcast()">Stop</button>
             
-            <div id="broadcastStatus" class="status"></div>
+            <div id="broadcastStatus" class="status" style="color: #007bff;"></div>
             <div id="qrcode-container">
                 <div id="qrcode"></div>
             </div>
@@ -70,8 +70,8 @@
 
     <script>
         // --- SENDER LOGIC ---
-        const CHUNK_SIZE = 150; // Bytes per frame. Keep low for reliable scanning.
-        const FPS = 3; // Frames per second
+        const CHUNK_SIZE = 50; // Lowered to 50 bytes per frame for higher reliability
+        const FPS = 2; // Lowered to 2 Frames Per Second to give cameras time to focus
         let frames = [];
         let currentFrameIdx = 0;
         let broadcastInterval = null;
@@ -145,14 +145,37 @@
             document.getElementById('progressBar').style.display = 'block';
             document.getElementById('progressFill').style.width = '0%';
             document.getElementById('downloadArea').style.display = 'none';
-            document.getElementById('receiveStatus').innerText = "Scanning...";
+            
+            // Update status to show we are waiting for permissions
+            const statusEl = document.getElementById('receiveStatus');
+            statusEl.innerText = "Requesting camera access...";
+            statusEl.style.color = "#d9534f";
 
             html5QrcodeScanner = new Html5Qrcode("reader");
             
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            // Adjusted config: aspectRatio helps mobile cameras scale better
+            const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
             
-            html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess)
-            .catch(err => console.error(err));
+            html5QrcodeScanner.start(
+                { facingMode: "environment" }, 
+                config, 
+                onScanSuccess,
+                (errorMessage) => {
+                    // This triggers constantly when a QR is NOT found in the current frame.
+                    // Keep this empty so it doesn't spam your console.
+                }
+            )
+            .then(() => {
+                // If it successfully starts, update the UI
+                statusEl.innerText = "Camera active. Scanning for frames...";
+                statusEl.style.color = "#28a745"; // Green for success
+            })
+            .catch(err => {
+                // If it fails (permissions, file:// protocol, etc), print it to the screen
+                console.error(err);
+                statusEl.innerText = "Camera Error: Please ensure you are running this on localhost/HTTPS and have granted camera permissions. Details: " + err;
+                statusEl.style.color = "#d9534f";
+            });
         }
 
         function onScanSuccess(decodedText) {
@@ -184,12 +207,17 @@
             const receivedCount = Object.keys(receivedFrames).length;
             const percentage = (receivedCount / totalFramesExpected) * 100;
             document.getElementById('progressFill').style.width = percentage + '%';
-            document.getElementById('receiveStatus').innerText = `Received ${receivedCount} / ${totalFramesExpected} frames`;
+            
+            const statusEl = document.getElementById('receiveStatus');
+            statusEl.innerText = `Received ${receivedCount} / ${totalFramesExpected} frames`;
+            statusEl.style.color = "#007bff";
         }
 
         function finalizeTransfer() {
             stopScanner();
-            document.getElementById('receiveStatus').innerText = "File successfully reconstructed!";
+            const statusEl = document.getElementById('receiveStatus');
+            statusEl.innerText = "File successfully reconstructed!";
+            statusEl.style.color = "#28a745";
             
             // Reassemble chunks
             let fullDataUrl = "";
