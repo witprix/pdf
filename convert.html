@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            padding: 20px;
+            max-width: 600px;
+            margin: auto;
+        }
+        .container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h2 {
+            font-size: 1.2rem;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .file-input {
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .status {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- PDF to Word Section -->
+    <div class="container" id="pdf-to-word-section">
+        <h2>Convert PDF to Word</h2>
+        <input type="file" id="pdfFile" class="file-input" accept="application/pdf">
+        <button onclick="convertPdfToWord()">Convert to .docx</button>
+        <div id="pdf-status" class="status"></div>
+    </div>
+
+    <!-- Word to PDF Section -->
+    <div class="container" id="word-to-pdf-section">
+        <h2>Convert Word to PDF</h2>
+        <input type="file" id="wordFile" class="file-input" accept=".doc, .docx">
+        <button onclick="convertWordToPdf()">Convert to .pdf</button>
+        <div id="word-status" class="status"></div>
+    </div>
+
+    <script>
+        // REPLACE WITH YOUR ACTUAL API KEY AND ENDPOINT
+        const API_KEY = 'YOUR_API_KEY_HERE'; 
+        const API_ENDPOINT = 'https://api.your-chosen-converter.com/v1/convert';
+
+        // ==========================================
+        // LOGIC 1: PDF to Word Conversion
+        // ==========================================
+        async function convertPdfToWord() {
+            const fileInput = document.getElementById('pdfFile');
+            const statusDiv = document.getElementById('pdf-status');
+            
+            if (!fileInput.files[0]) {
+                statusDiv.innerText = "Please select a PDF file first.";
+                return;
+            }
+
+            const file = fileInput.files[0];
+            statusDiv.innerText = `Uploading and processing ${file.name}...`;
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('format', 'docx'); // Target format
+
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${API_KEY}` },
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Conversion failed.');
+
+                const blob = await response.blob();
+                downloadFile(blob, file.name.replace('.pdf', '.docx'));
+                statusDiv.innerText = "Conversion successful!";
+                
+            } catch (error) {
+                console.error("PDF to Word Error:", error);
+                statusDiv.innerText = "Error during conversion. Check console.";
+            }
+        }
+
+        // ==========================================
+        // LOGIC 2: Word to PDF Conversion
+        // ==========================================
+        async function convertWordToPdf() {
+            const fileInput = document.getElementById('wordFile');
+            const statusDiv = document.getElementById('word-status');
+            
+            if (!fileInput.files[0]) {
+                statusDiv.innerText = "Please select a Word file first.";
+                return;
+            }
+
+            const file = fileInput.files[0];
+            statusDiv.innerText = `Uploading and processing ${file.name}...`;
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('format', 'pdf'); // Target format
+
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${API_KEY}` },
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Conversion failed.');
+
+                const blob = await response.blob();
+                downloadFile(blob, file.name.replace(/\.docx?$/, '.pdf'));
+                statusDiv.innerText = "Conversion successful!";
+                
+            } catch (error) {
+                console.error("Word to PDF Error:", error);
+                statusDiv.innerText = "Error during conversion. Check console.";
+            }
+        }
+
+        // ==========================================
+        // UTILITY: Handle File Downloads
+        // ==========================================
+        function downloadFile(blob, filename) {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
