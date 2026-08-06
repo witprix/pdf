@@ -383,8 +383,13 @@ function mergeRuns(items){
 function getCells(line){
   const items = line.items;
   if(items.length===0) return [];
-  const avgH = items.reduce((s,it)=>s+(it.fontHeight||10),0)/items.length;
-  const gapThresh = avgH * 1.9;
+  // Use average character width (item width / string length), not font height, to decide what
+  // counts as a "column gap" vs a normal word space — height is a poor proxy for horizontal
+  // spacing, especially with bold/condensed fonts or small numeric columns.
+  let totalW=0, totalLen=0;
+  items.forEach(it=>{ totalW += (it.width||0); totalLen += Math.max(1,(it.str||'').length); });
+  const avgCharW = totalLen>0 ? (totalW/totalLen) : 5;
+  const gapThresh = Math.max(avgCharW*4.5, 12);
   const cells = [];
   let cur = {x: items[0].x, items:[items[0]], endX: items[0].x+items[0].width};
   for(let k=1;k<items.length;k++){
@@ -403,10 +408,15 @@ function alignmentScore(a,b){
 }
 function buildTableBlock(bufferCells){
   const allX = [];
-  bufferCells.forEach(row=>row.forEach(c=>allX.push(c.x)));
+  let totalW=0, totalLen=0;
+  bufferCells.forEach(row=>row.forEach(c=>{
+    allX.push(c.x);
+    c.items.forEach(it=>{ totalW += (it.width||0); totalLen += Math.max(1,(it.str||'').length); });
+  }));
   allX.sort((a,b)=>a-b);
+  const avgCharW = totalLen>0 ? (totalW/totalLen) : 5;
+  const tol = Math.max(avgCharW*2.5, 12);
   const cols = [];
-  const tol = 14;
   allX.forEach(x=>{
     let cluster = cols.find(c=>Math.abs(c.center-x)<=tol);
     if(cluster){ cluster.xs.push(x); cluster.center = cluster.xs.reduce((s,v)=>s+v,0)/cluster.xs.length; }
