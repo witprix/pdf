@@ -132,7 +132,7 @@
     <div class="drop" id="drop-p2w">
       <div class="icon">📄</div>
       <div class="main">Drop PDFs here or click to browse</div>
-      <div class="sub">Multiple files supported · up to 50MB each</div>
+      <div class="sub">Multiple files supported · up to 50MB each · conversion starts automatically</div>
       <input type="file" id="file-p2w" accept="application/pdf" multiple>
     </div>
     <div class="queue" id="queue-p2w"></div>
@@ -142,7 +142,7 @@
       <label><input type="checkbox" id="opt-tables" checked> Detect and rebuild tables</label>
       <label><input type="checkbox" id="opt-ocr" checked> OCR fallback for scanned / image-only pages</label>
     </div>
-    <button class="btn" id="go-p2w" disabled>Convert all</button>
+    <button class="btn" id="go-p2w" disabled>Convert / retry all</button>
     <div class="note"><b>Table detection</b> clusters aligned text into real Word tables. <b>OCR fallback</b> (Tesseract.js) kicks in automatically on pages with little or no extractable text — it's slower and won't capture bold/italic, since that information doesn't survive OCR. Multi-column magazine-style layouts can still get merged into one flow.</div>
   </div>
 
@@ -150,14 +150,14 @@
     <div class="drop" id="drop-w2p">
       <div class="icon">📝</div>
       <div class="main">Drop .docx files here or click to browse</div>
-      <div class="sub">Multiple files supported · up to 50MB each</div>
+      <div class="sub">Multiple files supported · up to 50MB each · conversion starts automatically</div>
       <input type="file" id="file-w2p" accept=".docx" multiple>
     </div>
     <div class="queue" id="queue-w2p"></div>
     <div class="options">
       <label><input type="checkbox" id="opt-fontmatch" checked> Match document fonts (serif/sans/mono) instead of a flat default</label>
     </div>
-    <button class="btn" id="go-w2p" disabled>Convert all</button>
+    <button class="btn" id="go-w2p" disabled>Convert / retry all</button>
     <div class="note"><b>Font matching</b> reads which fonts the .docx specifies and applies the closest matching web font family per element (serif for Georgia/Cambria/Times, monospace for Consolas/Courier, etc). This is font <i>matching</i>, not literal embedded-font extraction — real font files embedded in a .docx are rare and stored in an obfuscated binary format that isn't reliably recoverable in-browser, so the closest visual match is used instead.</div>
   </div>
 
@@ -303,20 +303,20 @@ function makeQueue(containerId){
   return { items, add, render, updateProgress, updateGoButton, setGoBtn:(b)=>{goBtnRef=b; updateGoButton();} };
 }
 
-function setupDrop(dropId, inputId, queueApi){
+function setupDrop(dropId, inputId, queueApi, onAdd){
   const drop = document.getElementById(dropId);
   const input = document.getElementById(inputId);
   drop.onclick = ()=> input.click();
   drop.ondragover = e=>{ e.preventDefault(); drop.classList.add('drag'); };
   drop.ondragleave = ()=> drop.classList.remove('drag');
-  drop.ondrop = e=>{ e.preventDefault(); drop.classList.remove('drag'); if(e.dataTransfer.files.length){ queueApi.add(e.dataTransfer.files); queueApi.updateGoButton(); } };
-  input.onchange = e=>{ if(e.target.files.length){ queueApi.add(e.target.files); queueApi.updateGoButton(); } input.value=''; };
+  drop.ondrop = e=>{ e.preventDefault(); drop.classList.remove('drag'); if(e.dataTransfer.files.length){ queueApi.add(e.dataTransfer.files); queueApi.updateGoButton(); if(onAdd) onAdd(); } };
+  input.onchange = e=>{ if(e.target.files.length){ queueApi.add(e.target.files); queueApi.updateGoButton(); if(onAdd) onAdd(); } input.value=''; };
 }
 
 const q_p2w = makeQueue('queue-p2w');
 const q_w2p = makeQueue('queue-w2p');
-setupDrop('drop-p2w','file-p2w', q_p2w);
-setupDrop('drop-w2p','file-w2p', q_w2p);
+setupDrop('drop-p2w','file-p2w', q_p2w, ()=>runP2W());
+setupDrop('drop-w2p','file-w2p', q_w2p, ()=>runW2P());
 q_p2w.setGoBtn(document.getElementById('go-p2w'));
 q_w2p.setGoBtn(document.getElementById('go-w2p'));
 
@@ -660,21 +660,36 @@ async function processPdfFile(item, idx, opts){
   }
 }
 
-document.getElementById('go-p2w').onclick = async ()=>{
+let p2wRunning = false;
+async function runP2W(){
+  if(p2wRunning) return; // already converting; new files just picked up next pass
+  p2wRunning = true;
   const btn = document.getElementById('go-p2w');
   btn.disabled = true;
-  const opts = {
-    indent: document.getElementById('opt-indent').checked,
-    pagebreaks: document.getElementById('opt-pagebreaks').checked,
-    tables: document.getElementById('opt-tables').checked,
-    ocr: document.getElementById('opt-ocr').checked
-  };
-  for(let i=0;i<q_p2w.items.length;i++){
-    if(q_p2w.items[i].resultBlob) continue;
-    await processPdfFile(q_p2w.items[i], i, opts);
+  try{
+    const opts = {
+      indent: document.getElementById('opt-indent').checked,
+      pagebreaks: document.getElementById('opt-pagebreaks').checked,
+      tables: document.getElementById('opt-tables').checked,
+      ocr: document.getElementById('opt-ocr').checked
+    };
+    // loop with a live length check so files added mid-run still get picked up
+    for(let i=0; i<q_p2w.items.length; i++){
+      const it = q_p2w.items[i];
+      if(it.resultBlob) continue; // leave successful conversions alone; retry everything else
+      try{
+        await processPdfFile(it, i, opts);
+      }catch(err){
+        console.error('Unexpected error converting', it.file.name, err);
+        q_p2w.updateProgress(i, 0, 'Unexpected error — see browser console (F12)', 'bad');
+      }
+    }
+  } finally {
+    p2wRunning = false;
+    btn.disabled = false;
   }
-  btn.disabled = false;
-};
+}
+document.getElementById('go-p2w').onclick = runP2W;
 
 function fontStackFor(name){
   if(!name) return `Calibri, Arial, sans-serif`;
@@ -780,16 +795,30 @@ async function processDocxFile(item, idx, opts){
   }
 }
 
-document.getElementById('go-w2p').onclick = async ()=>{
+let w2pRunning = false;
+async function runW2P(){
+  if(w2pRunning) return;
+  w2pRunning = true;
   const btn = document.getElementById('go-w2p');
   btn.disabled = true;
-  const opts = { fontmatch: document.getElementById('opt-fontmatch').checked };
-  for(let i=0;i<q_w2p.items.length;i++){
-    if(q_w2p.items[i].resultBlob) continue;
-    await processDocxFile(q_w2p.items[i], i, opts);
+  try{
+    const opts = { fontmatch: document.getElementById('opt-fontmatch').checked };
+    for(let i=0; i<q_w2p.items.length; i++){
+      const it = q_w2p.items[i];
+      if(it.resultBlob) continue; // leave successful conversions alone; retry everything else
+      try{
+        await processDocxFile(it, i, opts);
+      }catch(err){
+        console.error('Unexpected error converting', it.file.name, err);
+        q_w2p.updateProgress(i, 0, 'Unexpected error — see browser console (F12)', 'bad');
+      }
+    }
+  } finally {
+    w2pRunning = false;
+    btn.disabled = false;
   }
-  btn.disabled = false;
-};
+}
+document.getElementById('go-w2p').onclick = runW2P;
 </script>
 </body>
 </html>
