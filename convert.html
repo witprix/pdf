@@ -143,7 +143,7 @@
       <label><input type="checkbox" id="opt-ocr" checked> OCR fallback for scanned / image-only pages</label>
     </div>
     <button class="btn" id="go-p2w" disabled>Convert / retry all</button>
-    <div class="note"><b>Table detection</b> clusters aligned text into real Word tables. <b>OCR fallback</b> (Tesseract.js) kicks in automatically on pages with little or no extractable text — it's slower and won't capture bold/italic, since that information doesn't survive OCR. Multi-column magazine-style layouts can still get merged into one flow.</div>
+    <div class="note"><b>Table detection</b> clusters aligned text into real Word tables, including form-style label/value grids (invoice headers, ID fields) even when row heights vary slightly. <b>OCR fallback</b> (Tesseract.js) kicks in automatically on pages with little or no extractable text — it's slower and won't capture bold/italic, since that information doesn't survive OCR. One honest limit: the outer box/border lines you see in many PDFs (invoice frames, ruled boxes) are vector graphics, not text — only content recognized as a table gets a border in the output, so a converted document will have the right text and structure but won't visually box things the PDF didn't express as a genuine table.</div>
   </div>
 
   <div class="panel" id="panel-w2p">
@@ -384,7 +384,7 @@ function getCells(line){
   const items = line.items;
   if(items.length===0) return [];
   const avgH = items.reduce((s,it)=>s+(it.fontHeight||10),0)/items.length;
-  const gapThresh = avgH * 2.3;
+  const gapThresh = avgH * 1.9;
   const cells = [];
   let cur = {x: items[0].x, items:[items[0]], endX: items[0].x+items[0].width};
   for(let k=1;k<items.length;k++){
@@ -431,17 +431,26 @@ function detectBlocks(lines, tablesEnabled){
     if(tablesEnabled){
       const cells0 = getCells(lines[i]);
       if(cells0.length >= 2){
+        // Grow a run of consecutive multi-cell lines. Row-to-row x alignment is NOT required —
+        // form-style layouts (label/value pairs) often shift slightly per row when a value wraps,
+        // so we only require each line to have >=2 cells; buildTableBlock then clusters all the
+        // x-positions across the whole run to find the real columns.
         let j = i+1;
         const buffer = [cells0];
         while(j < lines.length){
           const c = getCells(lines[j]);
-          if(c.length >= 2 && alignmentScore(buffer[buffer.length-1], c) > 0.4){ buffer.push(c); j++; }
+          if(c.length >= 2){ buffer.push(c); j++; }
           else break;
         }
-        if(buffer.length >= 3){
-          blocks.push(buildTableBlock(buffer));
-          i = j;
-          continue;
+        if(buffer.length >= 2){
+          const block = buildTableBlock(buffer);
+          // sanity cap: if clustering produced an implausible number of "columns" this probably
+          // wasn't a real table (e.g. justified body text with wide gaps) — fall back to paragraphs
+          if(block.numCols >= 2 && block.numCols <= 6){
+            blocks.push(block);
+            i = j;
+            continue;
+          }
         }
       }
     }
