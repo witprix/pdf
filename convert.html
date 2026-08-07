@@ -346,6 +346,31 @@ document.getElementById('pvClose').onclick = ()=> document.getElementById('pvMod
 document.getElementById('pvPrev').onclick = ()=>{ if(pvState.page>0){ pvState.page--; renderPreviewPage(); } };
 document.getElementById('pvNext').onclick = ()=>{ if(pvState.page < pvState.item.pageData.length-1){ pvState.page++; renderPreviewPage(); } };
 
+// Some PDF generators bundle an entire visual row ("1   Rs 349...   998413   1   349.00")
+// into a single text item with wide internal whitespace, instead of one item per column.
+// Cell-splitting only looks at gaps BETWEEN items, so it's blind to this. Detect runs of 2+
+// spaces inside a single item's string and split it into positioned sub-items so column
+// detection can see them.
+function expandItem(it){
+  if(!it.str || !/ {2,}/.test(it.str)) return [it];
+  const len = it.str.length;
+  const charW = len>0 ? (it.width / len) : 0;
+  const segments = [];
+  const re = / {2,}/g;
+  let lastIndex = 0, m;
+  while((m = re.exec(it.str)) !== null){
+    if(m.index > lastIndex) segments.push({text: it.str.slice(lastIndex, m.index), start: lastIndex});
+    lastIndex = re.lastIndex;
+  }
+  if(lastIndex < len) segments.push({text: it.str.slice(lastIndex), start: lastIndex});
+  const real = segments.filter(s=>s.text.trim().length>0);
+  if(real.length <= 1) return [it];
+  return real.map(seg=>({
+    str: seg.text, x: it.x + charW*seg.start, y: it.y,
+    fontHeight: it.fontHeight, fontName: it.fontName, width: charW*seg.text.length
+  }));
+}
+
 function groupLines(items){
   const sorted = [...items].sort((a,b)=> b.y - a.y || a.x - b.x);
   const lines = [];
@@ -357,7 +382,53 @@ function groupLines(items){
   }
   lines.sort((a,b)=> b.y - a.y);
   lines.forEach(l => l.items.sort((a,b)=> a.x - b.x));
-  return lines;
+  return mergeStaggeredRows(lines);
+}
+
+// Some cells (e.g. a header cell whose label wraps to two words stacked vertically, like
+// "Sr." over "No.") get vertically centered slightly differently than their neighbors, so
+// pdf.js reports them a few points off in y even though they're visually the same table row.
+// A genuine new paragraph line is usually a full line-height apart (~11-14pt in most PDFs);
+// these stray offsets are typically about half that. So: chain-merge lines that are within a
+// small vertical gap of each other (rolling, so two small gaps in a row still combine), folding
+// any item that horizontally overlaps an existing item (a true wrapped continuation within one
+// cell, e.g. "No." under "Sr.") into that item's text, and adding any non-overlapping item as a
+// new column (a genuine side-by-side cell that just landed a few points off).
+function mergeStaggeredRows(lines){
+  const THRESH = 8;
+  const merged = [];
+  let i = 0;
+  while(i < lines.length){
+    let cur = lines[i];
+    let j = i+1;
+    while(j < lines.length){
+      const nxt = lines[j];
+      const ydiff = cur.y - nxt.y;
+      if(ydiff > 0 && ydiff <= THRESH){
+        const newItems = cur.items.map(it=>({...it}));
+        nxt.items.forEach(nb=>{
+          const b0 = nb.x, b1 = nb.x + nb.width;
+          const match = newItems.find(ca=>{
+            const a0 = ca.x, a1 = ca.x + ca.width;
+            return a0 < b1 && b0 < a1;
+          });
+          if(match){
+            match.str = match.str + ' ' + nb.str;
+            match.width = Math.max(match.width, (nb.x+nb.width) - match.x);
+          } else {
+            newItems.push(nb);
+          }
+        });
+        cur = { y: nxt.y, items: newItems.sort((a,b)=>a.x-b.x) };
+        j++;
+        continue;
+      }
+      break;
+    }
+    merged.push(cur);
+    i = j;
+  }
+  return merged;
 }
 
 function mergeRuns(items){
@@ -389,7 +460,7 @@ function getCells(line){
   let totalW=0, totalLen=0;
   items.forEach(it=>{ totalW += (it.width||0); totalLen += Math.max(1,(it.str||'').length); });
   const avgCharW = totalLen>0 ? (totalW/totalLen) : 5;
-  const gapThresh = Math.max(avgCharW*4.5, 12);
+  const gapThresh = Math.max(avgCharW*3.2, 10);
   const cells = [];
   let cur = {x: items[0].x, items:[items[0]], endX: items[0].x+items[0].width};
   for(let k=1;k<items.length;k++){
@@ -407,32 +478,36 @@ function alignmentScore(a,b){
   return matches / Math.max(a.length,b.length);
 }
 function buildTableBlock(bufferCells){
-  const allX = [];
-  let totalW=0, totalLen=0;
+  // Cluster by horizontal SPAN overlap, not left-edge distance — a right-aligned numeric value
+  // and its left-aligned header label can start at very different x while still belonging to
+  // the same visual column, as long as their spans overlap (e.g. a "Taxable Amount" header vs
+  // its right-aligned currency value below it).
+  const spans = [];
   bufferCells.forEach(row=>row.forEach(c=>{
-    allX.push(c.x);
-    c.items.forEach(it=>{ totalW += (it.width||0); totalLen += Math.max(1,(it.str||'').length); });
+    const lo = Math.min(...c.items.map(it=>it.x));
+    const hi = Math.max(...c.items.map(it=>it.x+it.width));
+    spans.push({cell:c, lo, hi});
   }));
-  allX.sort((a,b)=>a-b);
-  const avgCharW = totalLen>0 ? (totalW/totalLen) : 5;
-  const tol = Math.max(avgCharW*2.5, 12);
-  const cols = [];
-  allX.forEach(x=>{
-    let cluster = cols.find(c=>Math.abs(c.center-x)<=tol);
-    if(cluster){ cluster.xs.push(x); cluster.center = cluster.xs.reduce((s,v)=>s+v,0)/cluster.xs.length; }
-    else cols.push({center:x, xs:[x]});
+  spans.sort((a,b)=>a.lo-b.lo);
+  const groups = [];
+  spans.forEach(s=>{
+    const g = groups.find(g => s.lo <= g.hi && s.hi >= g.lo);
+    if(g){ g.hi = Math.max(g.hi, s.hi); g.lo = Math.min(g.lo, s.lo); }
+    else groups.push({lo: s.lo, hi: s.hi});
   });
-  cols.sort((a,b)=>a.center-b.center);
+  groups.sort((a,b)=>a.lo-b.lo);
   const rows = bufferCells.map(row=>{
-    const rowCells = cols.map(()=>({items:[]}));
+    const rowCells = groups.map(()=>({items:[]}));
     row.forEach(c=>{
-      let bestIdx=0, bestDist=Infinity;
-      cols.forEach((col,idx)=>{ const d=Math.abs(col.center-c.x); if(d<bestDist){bestDist=d;bestIdx=idx;} });
+      const lo = Math.min(...c.items.map(it=>it.x));
+      const hi = Math.max(...c.items.map(it=>it.x+it.width));
+      let bestIdx=0, bestOverlap=-Infinity;
+      groups.forEach((g,idx)=>{ const ov = Math.min(hi,g.hi) - Math.max(lo,g.lo); if(ov>bestOverlap){bestOverlap=ov; bestIdx=idx;} });
       rowCells[bestIdx].items.push(...c.items);
     });
     return rowCells;
   });
-  return {type:'table', rows, numCols: cols.length};
+  return {type:'table', rows, numCols: groups.length};
 }
 function detectBlocks(lines, tablesEnabled){
   const blocks = [];
@@ -456,7 +531,7 @@ function detectBlocks(lines, tablesEnabled){
           const block = buildTableBlock(buffer);
           // sanity cap: if clustering produced an implausible number of "columns" this probably
           // wasn't a real table (e.g. justified body text with wide gaps) — fall back to paragraphs
-          if(block.numCols >= 2 && block.numCols <= 6){
+          if(block.numCols >= 2 && block.numCols <= 10){
             blocks.push(block);
             i = j;
             continue;
@@ -489,7 +564,7 @@ async function ocrPageItems(page){
       fontHeight: Math.max(6,(b.y1-b.y0)/scale), fontName: '', width: (b.x1-b.x0)/scale
     });
   });
-  return items;
+  return items.flatMap(expandItem);
 }
 
 function blockToHtml(block){
@@ -615,7 +690,8 @@ async function processPdfFile(item, idx, opts){
       let items = content.items.map(it=>{
         const t = it.transform;
         return { str: it.str, x: t[4], y: t[5], fontHeight: Math.hypot(t[2],t[3])||Math.abs(t[3])||10, fontName: it.fontName||'', width: it.width||0 };
-      }).filter(it=>it.str && it.str.trim().length>0);
+      }).filter(it=>it.str && it.str.trim().length>0)
+        .flatMap(expandItem);
 
       totalTextItems += items.length;
       let usedOcr = false;
