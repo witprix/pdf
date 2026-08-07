@@ -67,15 +67,32 @@
     padding: 10px 12px; border-radius: 8px; font-size: 0.95rem; outline: none; margin-top: 8px;
   }
 
-  /* FULL SCREEN Camera live view */
+  /* FULL SCREEN Camera live view - TRUE MOBILE VIEWPORT FIX */
   #cameraWrap {
-    display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    background: #000; z-index: 9999; flex-direction: column;
+    display: none; 
+    position: fixed; 
+    top: 0; left: 0; right: 0; bottom: 0; /* Pins to exact physical boundaries */
+    width: 100%; 
+    height: 100%;
+    height: 100dvh; /* Dynamic Viewport - ignores hidden browser bars */
+    background: #000; 
+    z-index: 9999; 
+    flex-direction: column;
   }
-  #video { flex: 1; width: 100%; height: auto; object-fit: contain; background: #000; }
+  #video { 
+    flex: 1; 
+    width: 100%; 
+    height: 100%; 
+    min-height: 0; /* Prevents video from pushing buttons off screen */
+    object-fit: cover; 
+    background: #000; 
+  }
   .camera-controls {
-    flex-shrink: 0; display: flex; justify-content: space-evenly; align-items: center;
-    padding: 20px 10px calc(30px + var(--safe-b)) 10px; background: #111; border-top: 1px solid #333;
+    flex-shrink: 0; /* Locks controls in place */
+    display: flex; justify-content: space-evenly; align-items: center;
+    padding: 24px 10px calc(30px + var(--safe-b)) 10px; 
+    background: #0f1115; 
+    border-top: 1px solid #2a2e38;
   }
   .cam-btn-small {
     background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 50%;
@@ -114,17 +131,17 @@
   
   .edit-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
-  /* New Action Row for Preview */
-  .action-row { display: flex; gap: 12px; margin-top: 16px; width: 100%; }
+  /* Action Row (Retake + Extract) */
+  .action-row { display: flex; gap: 10px; margin-top: 16px; width: 100%; }
   
   #retakeBtn {
     flex: 1; background: var(--panel2); color: var(--text); border: 1px solid var(--border);
-    border-radius: 14px; padding: 18px; font-weight: 700; font-size: 1.05rem;
+    border-radius: 14px; padding: 16px 8px; font-weight: 700; font-size: 0.95rem;
     cursor: pointer; transition: transform 0.1s;
   }
   #runBtn {
     flex: 2; background: var(--accent); color: #0f1115; border: none;
-    border-radius: 14px; padding: 18px; font-weight: 800; font-size: 1.1rem;
+    border-radius: 14px; padding: 16px 8px; font-weight: 800; font-size: 1.05rem;
     cursor: pointer; box-shadow: 0 4px 15px rgba(110, 231, 183, 0.2); transition: transform 0.1s;
   }
   #retakeBtn:active, #runBtn:active { transform: scale(0.98); }
@@ -465,13 +482,15 @@ runBtn.addEventListener('click', async () => {
     
     if (!blob) throw new Error("Image processing failed.");
 
-    const worker = await Tesseract.createWorker(lang, 1, {
+    const worker = await Tesseract.createWorker({
       logger: (m) => {
         if (m.status) statusText.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
         if (typeof m.progress === 'number') progressBar.value = m.progress;
       }
     });
     
+    await worker.loadLanguage(lang);
+    await worker.initialize(lang);
     await worker.setParameters({ tessedit_pageseg_mode: selectedMode });
     
     const { data: { text, confidence } } = await worker.recognize(blob);
