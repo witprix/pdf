@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0f1115">
 <title>Enhanced Image to Text (OCR)</title>
-<!-- Using Tesseract v5 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
 <style>
   :root {
@@ -68,7 +67,7 @@
     padding: 10px 12px; border-radius: 8px; font-size: 0.95rem; outline: none; margin-top: 8px;
   }
 
-  /* FULL SCREEN Camera live view - TRUE MOBILE VIEWPORT FIX */
+  /* FULL SCREEN Camera live view */
   #cameraWrap {
     display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
     width: 100%; height: 100%; height: 100dvh; background: #000; z-index: 9999; flex-direction: column;
@@ -106,7 +105,7 @@
   .slider-row span { min-width: 70px; }
   .slider-row input[type=range] { flex: 1; accent-color: var(--accent); height: 6px; }
   
-  .toggle-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
+  .toggle-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; margin-bottom: 12px; }
   .toggle-btn { 
     background: var(--panel2); color: var(--text); border: 1px solid var(--border);
     padding: 8px 16px; border-radius: 20px; cursor: pointer; font-weight: 600;
@@ -115,7 +114,7 @@
   
   .edit-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
-  /* Action Row (Retake + Extract) */
+  /* Action Row */
   .action-row { display: flex; gap: 10px; margin-top: 16px; width: 100%; }
   
   #retakeBtn {
@@ -230,7 +229,7 @@
         <button class="chip-btn" id="rotateRightBtn" type="button">⟳ Rotate Right</button>
       </div>
       
-      <details id="adjustmentsDetails">
+      <details id="adjustmentsDetails" open>
         <summary>Advanced Adjustments</summary>
         <div class="details-content">
           <div class="slider-row">
@@ -241,12 +240,17 @@
             <span>Brightness</span>
             <input type="range" id="brightnessSlider" min="-50" max="50" value="0">
           </div>
+          
           <div class="toggle-row">
-            <span>Enhance Document</span>
+            <span>Dark Sign? (Light text)</span>
+            <button class="toggle-btn" id="invertBtn" type="button">Invert OFF</button>
+          </div>
+          <div class="toggle-row">
+            <span>Remove Shadows</span>
             <button class="toggle-btn" id="bwFilterBtn" type="button">B/W Filter OFF</button>
           </div>
           
-          <div style="margin-top: 16px; font-size: 0.85rem; color: var(--muted);">Formatting:</div>
+          <div style="margin-top: 16px; font-size: 0.85rem; color: var(--muted);">Formatting Mode:</div>
           <div class="edit-toolbar" id="modeToolbar">
             <button class="chip-btn active" data-mode="3" type="button">Auto-detect</button>
             <button class="chip-btn" data-mode="6" type="button">Block of Text</button>
@@ -300,7 +304,8 @@ const captureBtn = document.getElementById('captureBtn'), cancelCameraBtn = docu
 const previewWrap = document.getElementById('previewWrap'), previewCanvas = document.getElementById('previewCanvas');
 const ctx = previewCanvas.getContext('2d', { willReadFrequently: true });
 const rotateLeftBtn = document.getElementById('rotateLeftBtn'), rotateRightBtn = document.getElementById('rotateRightBtn');
-const contrastSlider = document.getElementById('contrastSlider'), brightnessSlider = document.getElementById('brightnessSlider'), bwFilterBtn = document.getElementById('bwFilterBtn');
+const contrastSlider = document.getElementById('contrastSlider'), brightnessSlider = document.getElementById('brightnessSlider');
+const bwFilterBtn = document.getElementById('bwFilterBtn'), invertBtn = document.getElementById('invertBtn');
 const modeToolbar = document.getElementById('modeToolbar'), runBtn = document.getElementById('runBtn'), retakeBtn = document.getElementById('retakeBtn');
 const status = document.getElementById('status'), statusText = document.getElementById('statusText'), progressBar = document.getElementById('progressBar');
 const resultWrap = document.getElementById('resultWrap'), output = document.getElementById('output'), confidenceEl = document.getElementById('confidence');
@@ -310,7 +315,7 @@ const downloadBtn = document.getElementById('downloadBtn'), resetBtn = document.
 const adjustmentsDetails = document.getElementById('adjustmentsDetails');
 
 let currentStream = null, facingMode = 'environment', baseImage = null;
-let rotation = 0, selectedMode = '3', applyBwFilter = false;
+let rotation = 0, selectedMode = '3', applyBwFilter = false, applyInvert = false;
 
 // 1. Inputs
 chooseBtn.addEventListener('click', () => fileInput.click());
@@ -361,11 +366,12 @@ function loadFile(file) {
   const img = new Image();
   img.onload = () => {
     baseImage = img;
-    rotation = 0; contrastSlider.value = 0; brightnessSlider.value = 0; applyBwFilter = false;
-    updateBwBtnUI();
+    rotation = 0; contrastSlider.value = 0; brightnessSlider.value = 0; 
+    applyBwFilter = false; applyInvert = false;
+    updateToggleUI();
     inputSection.style.display = 'none';
     previewWrap.style.display = 'block'; resultWrap.style.display = 'none';
-    adjustmentsDetails.open = false;
+    adjustmentsDetails.open = true; // Kept open so user sees Invert option easily
     renderPreview();
     previewWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -377,7 +383,8 @@ function renderPreview() {
   const swapped = rotation % 180 !== 0;
   const w = swapped ? baseImage.height : baseImage.width, h = swapped ? baseImage.width : baseImage.height;
   
-  const scale = Math.min(1, 1200 / Math.max(w, h)); 
+  // Increased internal resolution to 1500px for better accuracy on small text
+  const scale = Math.min(1, 1500 / Math.max(w, h)); 
   previewCanvas.width = Math.round(w * scale); previewCanvas.height = Math.round(h * scale);
 
   ctx.save();
@@ -394,7 +401,7 @@ function applyImageAdjustments() {
   const contrast = parseFloat(contrastSlider.value); 
   const brightness = parseFloat(brightnessSlider.value); 
   
-  if (contrast === 0 && brightness === 0 && !applyBwFilter) return;
+  if (contrast === 0 && brightness === 0 && !applyBwFilter && !applyInvert) return;
 
   const imgData = ctx.getImageData(0, 0, previewCanvas.width, previewCanvas.height);
   const d = imgData.data;
@@ -403,12 +410,21 @@ function applyImageAdjustments() {
   for (let i = 0; i < d.length; i += 4) {
     let r = d[i], g = d[i+1], b = d[i+2];
     
+    // 1. Contrast & Brightness
     if (contrast !== 0 || brightness !== 0) {
       r = factor * (r - 128) + 128 + brightness;
       g = factor * (g - 128) + 128 + brightness;
       b = factor * (b - 128) + 128 + brightness;
     }
     
+    // 2. Invert (Crucial for light text on dark backgrounds)
+    if (applyInvert) {
+      r = 255 - r;
+      g = 255 - g;
+      b = 255 - b;
+    }
+    
+    // 3. Black & White Binarization
     if (applyBwFilter) {
       const gray = 0.299 * r + 0.587 * g + 0.114 * b;
       const v = gray > 140 ? 255 : 0;
@@ -427,15 +443,14 @@ rotateRightBtn.addEventListener('click', () => { rotation = (rotation + 90) % 36
 contrastSlider.addEventListener('input', renderPreview);
 brightnessSlider.addEventListener('input', renderPreview);
 
-bwFilterBtn.addEventListener('click', () => { 
-  applyBwFilter = !applyBwFilter; 
-  updateBwBtnUI(); 
-  renderPreview(); 
-});
+bwFilterBtn.addEventListener('click', () => { applyBwFilter = !applyBwFilter; updateToggleUI(); renderPreview(); });
+invertBtn.addEventListener('click', () => { applyInvert = !applyInvert; updateToggleUI(); renderPreview(); });
 
-function updateBwBtnUI() {
+function updateToggleUI() {
     bwFilterBtn.classList.toggle('active', applyBwFilter);
     bwFilterBtn.textContent = applyBwFilter ? 'B/W Filter ON' : 'B/W Filter OFF';
+    invertBtn.classList.toggle('active', applyInvert);
+    invertBtn.textContent = applyInvert ? 'Invert ON' : 'Invert OFF';
 }
 
 modeToolbar.addEventListener('click', (e) => {
@@ -448,7 +463,7 @@ modeToolbar.addEventListener('click', (e) => {
 
 const getCanvasBlob = (canvas) => new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 
-// 4. Stable Text Extraction (Fixed Tesseract V5 Syntax)
+// 4. Stable Text Extraction
 runBtn.addEventListener('click', async () => {
   runBtn.disabled = true;
   retakeBtn.disabled = true;
@@ -466,7 +481,6 @@ runBtn.addEventListener('click', async () => {
     
     if (!blob) throw new Error("Image processing failed.");
 
-    // EXCLUSIVE V5 SYNTAX - This prevents the silent promise hang
     const worker = await Tesseract.createWorker(lang, 1, {
       logger: (m) => {
         if (m.status) {
@@ -478,8 +492,10 @@ runBtn.addEventListener('click', async () => {
       }
     });
     
+    // Added preserve_interword_spaces to prevent column mashing
     await worker.setParameters({
-      tessedit_pageseg_mode: parseInt(selectedMode, 10)
+      tessedit_pageseg_mode: parseInt(selectedMode, 10),
+      preserve_interword_spaces: '1' 
     });
     
     const { data: { text, confidence } } = await worker.recognize(blob);
@@ -488,7 +504,7 @@ runBtn.addEventListener('click', async () => {
     const cleanedText = cleanText(text);
     const conf = Math.round(confidence || 0);
 
-    output.value = cleanedText || '(No text detected. Try rotating the image or adjusting contrast.)';
+    output.value = cleanedText || '(No text detected. Try turning ON the Invert button for dark signs.)';
     confidenceEl.textContent = cleanedText ? `Accuracy: ${conf}%` : '';
     confidenceEl.className = conf >= 75 ? 'high' : (conf < 50 ? 'low' : '');
 
