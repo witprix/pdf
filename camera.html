@@ -13,7 +13,6 @@
     --panel2: #222732;
     --border: #2a2e38;
     --accent: #6ee7b7;
-    --accent-hover: #34d399;
     --text: #e5e7eb;
     --muted: #9ca3af;
     --danger: #f87171;
@@ -68,23 +67,22 @@
     padding: 10px 12px; border-radius: 8px; font-size: 0.95rem; outline: none; margin-top: 8px;
   }
 
-  /* FULL SCREEN Camera live view */
+  /* FULL SCREEN Camera live view - FIXED LAYOUT */
   #cameraWrap {
     display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     background: #000; z-index: 9999; flex-direction: column;
   }
-  #video { flex: 1; width: 100%; height: 100%; object-fit: contain; }
+  #video { flex: 1; width: 100%; height: auto; object-fit: contain; background: #000; }
   .camera-controls {
-    position: absolute; bottom: calc(20px + var(--safe-b)); left: 0; width: 100%;
-    display: flex; justify-content: space-evenly; align-items: center;
-    padding: 20px; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+    flex-shrink: 0; display: flex; justify-content: space-evenly; align-items: center;
+    padding: 20px 10px calc(30px + var(--safe-b)) 10px; background: #111; border-top: 1px solid #333;
   }
   .cam-btn-small {
     background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 50%;
-    width: 50px; height: 50px; font-size: 1.2rem; cursor: pointer; backdrop-filter: blur(5px);
+    width: 56px; height: 56px; font-size: 1.2rem; cursor: pointer;
   }
   #captureBtn {
-    width: 72px; height: 72px; border-radius: 50%; background: var(--accent);
+    width: 76px; height: 76px; border-radius: 50%; background: var(--accent);
     border: 4px solid rgba(255,255,255,0.3); cursor: pointer;
   }
 
@@ -103,7 +101,6 @@
   }
   .chip-btn.active { background: var(--accent); color: #0f1115; border-color: var(--accent); font-weight: 700; }
   
-  /* Sliders & Toggles inside details */
   .slider-row { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: var(--muted); margin-bottom: 16px; }
   .slider-row span { min-width: 70px; }
   .slider-row input[type=range] { flex: 1; accent-color: var(--accent); height: 6px; }
@@ -117,7 +114,6 @@
   
   .edit-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
-  /* Giant Action Button */
   #runBtn {
     width: 100%; margin-top: 12px; background: var(--accent); color: #0f1115;
     border: none; border-radius: 14px; padding: 18px; font-weight: 800; font-size: 1.1rem;
@@ -128,6 +124,7 @@
 
   /* Status */
   #status { margin-top: 20px; font-size: 0.95rem; color: var(--accent); display: none; text-align: center; font-weight: 600; }
+  #status.error-text { color: var(--danger); }
   progress { width: 100%; height: 8px; margin-top: 10px; accent-color: var(--accent); border-radius: 8px; }
 
   /* Results */
@@ -144,7 +141,7 @@
     line-height: 1.6; resize: vertical; font-family: inherit;
   }
 
-  /* Extracted Entities */
+  /* Entities */
   #entities { margin-top: 20px; display: none; }
   #entities h4 { font-size: 0.9rem; color: var(--muted); margin: 0 0 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
   .entity-list { display: flex; flex-direction: column; gap: 10px; }
@@ -202,11 +199,10 @@
       </details>
     </div>
 
-    <!-- Hidden Inputs -->
     <input type="file" id="fileInput" accept="image/*">
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
-    <!-- Fullscreen Camera Overlay -->
+    <!-- Fullscreen Camera Overlay with Fixed Grid -->
     <div id="cameraWrap">
       <video id="video" autoplay playsinline muted></video>
       <div class="camera-controls">
@@ -243,9 +239,9 @@
           
           <div style="margin-top: 16px; font-size: 0.85rem; color: var(--muted);">Formatting:</div>
           <div class="edit-toolbar" id="modeToolbar">
-            <button class="chip-btn active" data-mode="auto" type="button">Auto-detect</button>
-            <button class="chip-btn" data-mode="document" type="button">Block of Text</button>
-            <button class="chip-btn" data-mode="line" type="button">Single Line</button>
+            <button class="chip-btn active" data-mode="3" type="button">Auto-detect</button>
+            <button class="chip-btn" data-mode="6" type="button">Block of Text</button>
+            <button class="chip-btn" data-mode="7" type="button">Single Line</button>
           </div>
         </div>
       </details>
@@ -284,7 +280,6 @@
   <div class="toast" id="toast"></div>
 
 <script>
-// UI Elements
 const chooseBtn = document.getElementById('chooseBtn'), fileInput = document.getElementById('fileInput');
 const cameraBtn = document.getElementById('cameraBtn'), cameraInput = document.getElementById('cameraInput');
 const langSelect = document.getElementById('langSelect'), inputSection = document.getElementById('inputSection');
@@ -302,16 +297,15 @@ const copyBtn = document.getElementById('copyBtn'), shareBtn = document.getEleme
 const downloadBtn = document.getElementById('downloadBtn'), resetBtn = document.getElementById('resetBtn'), toast = document.getElementById('toast');
 const adjustmentsDetails = document.getElementById('adjustmentsDetails');
 
-// State Variables
 let currentStream = null, facingMode = 'environment', baseImage = null;
-let rotation = 0, selectedMode = 'auto', applyBwFilter = false;
+let rotation = 0, selectedMode = '3', applyBwFilter = false;
 
 // 1. Inputs
 chooseBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFile(fileInput.files[0]); });
 cameraInput.addEventListener('change', () => { if (cameraInput.files.length) loadFile(cameraInput.files[0]); });
 
-// 2. Fullscreen Camera Handling
+// 2. Camera Handling
 cameraBtn.addEventListener('click', async () => {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return cameraInput.click();
   await startCamera();
@@ -324,10 +318,10 @@ async function startCamera() {
       video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
     video.srcObject = currentStream;
-    cameraWrap.style.display = 'flex'; // Use flex for fullscreen overlay layout
-    document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    cameraWrap.style.display = 'flex';
+    document.body.style.overflow = 'hidden'; 
   } catch (err) { 
-    cameraInput.click(); // Fallback to native camera input
+    cameraInput.click();
   }
 }
 
@@ -349,17 +343,17 @@ captureBtn.addEventListener('click', () => {
   }, 'image/jpeg', 0.95);
 });
 
-// 3. Image Processing & Fixed Color Filters
+// 3. Image Loading and Editing
 function loadFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
   const img = new Image();
   img.onload = () => {
     baseImage = img;
-    rotation = 0; contrastSlider.value = 0; brightnessSlider.value = 0; applyBwFilter = false; // Reset to defaults
+    rotation = 0; contrastSlider.value = 0; brightnessSlider.value = 0; applyBwFilter = false;
     updateBwBtnUI();
-    inputSection.style.display = 'none'; // Hide initial buttons to save space
+    inputSection.style.display = 'none';
     previewWrap.style.display = 'block'; resultWrap.style.display = 'none';
-    adjustmentsDetails.open = false; // Collapse advanced options by default
+    adjustmentsDetails.open = false;
     renderPreview();
     previewWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -370,7 +364,9 @@ function renderPreview() {
   if (!baseImage) return;
   const swapped = rotation % 180 !== 0;
   const w = swapped ? baseImage.height : baseImage.width, h = swapped ? baseImage.width : baseImage.height;
-  const scale = Math.min(1, 2000 / Math.max(w, h)); 
+  
+  // DOWNSCALED MAX DIMENSION to 1200px to prevent mobile browser memory crashes
+  const scale = Math.min(1, 1200 / Math.max(w, h)); 
   previewCanvas.width = Math.round(w * scale); previewCanvas.height = Math.round(h * scale);
 
   ctx.save();
@@ -384,31 +380,30 @@ function renderPreview() {
 }
 
 function applyImageAdjustments() {
-  const contrast = parseFloat(contrastSlider.value); // -50 to 50
-  const brightness = parseFloat(brightnessSlider.value); // -50 to 50
+  const contrast = parseFloat(contrastSlider.value); 
+  const brightness = parseFloat(brightnessSlider.value); 
+  
+  // PERFORMANCE FIX: Skip processing entirely if no filters are active
+  if (contrast === 0 && brightness === 0 && !applyBwFilter) return;
+
   const imgData = ctx.getImageData(0, 0, previewCanvas.width, previewCanvas.height);
   const d = imgData.data;
-  
-  // Standard RGB contrast factor formula
   const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
   
   for (let i = 0; i < d.length; i += 4) {
     let r = d[i], g = d[i+1], b = d[i+2];
     
-    // Apply contrast and brightness adjustments directly to the color channels
     if (contrast !== 0 || brightness !== 0) {
       r = factor * (r - 128) + 128 + brightness;
       g = factor * (g - 128) + 128 + brightness;
       b = factor * (b - 128) + 128 + brightness;
     }
     
-    // ONLY force grayscale and threshold if the B/W filter is explicitly ON
     if (applyBwFilter) {
       const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-      const v = gray > 140 ? 255 : 0; // High contrast threshold for reading
+      const v = gray > 140 ? 255 : 0;
       d[i] = d[i+1] = d[i+2] = v;
     } else {
-      // Otherwise, clamp color values and keep the color
       d[i] = Math.max(0, Math.min(255, r));
       d[i+1] = Math.max(0, Math.min(255, g));
       d[i+2] = Math.max(0, Math.min(255, b));
@@ -441,56 +436,58 @@ modeToolbar.addEventListener('click', (e) => {
   selectedMode = btn.dataset.mode;
 });
 
-// 4. Extract Text
-const PSM_MAP = { auto: 3, document: 6, line: 7 };
+// Helper to convert canvas to blob via Promise
+const getCanvasBlob = (canvas) => new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 
+// 4. Stable Text Extraction 
 runBtn.addEventListener('click', async () => {
   runBtn.disabled = true;
-  adjustmentsDetails.open = false; // Collapse settings while running
+  adjustmentsDetails.open = false; 
   status.style.display = 'block'; resultWrap.style.display = 'none';
   statusText.textContent = 'Initializing AI...';
+  statusText.classList.remove('error-text');
   progressBar.value = 0;
   
-  // Auto-scroll to progress bar
   status.scrollIntoView({ behavior: 'smooth', block: 'center' });
   
-  const lang = langSelect.value;
-  const psm = PSM_MAP[selectedMode] || 3;
+  try {
+    const lang = langSelect.value;
+    const blob = await getCanvasBlob(previewCanvas);
+    
+    if (!blob) throw new Error("Image processing failed.");
 
-  previewCanvas.toBlob(async (blob) => {
-    try {
-      const worker = await Tesseract.createWorker({
-        logger: (m) => {
-          if (m.status) statusText.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
-          if (typeof m.progress === 'number') progressBar.value = m.progress;
-        }
-      });
-      
-      await worker.loadLanguage(lang);
-      await worker.initialize(lang);
-      await worker.setParameters({ tessedit_pageseg_mode: psm });
-      
-      const { data: { text, confidence } } = await worker.recognize(blob);
-      await worker.terminate();
+    // Rewritten Tesseract API call to prevent silent freezing on mobile
+    const worker = await Tesseract.createWorker(lang, 1, {
+      logger: (m) => {
+        if (m.status) statusText.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
+        if (typeof m.progress === 'number') progressBar.value = m.progress;
+      }
+    });
+    
+    await worker.setParameters({ tessedit_pageseg_mode: selectedMode });
+    
+    const { data: { text, confidence } } = await worker.recognize(blob);
+    await worker.terminate();
 
-      const cleanedText = cleanText(text);
-      const conf = Math.round(confidence || 0);
+    const cleanedText = cleanText(text);
+    const conf = Math.round(confidence || 0);
 
-      output.value = cleanedText || '(No text detected — try turning ON the B/W filter or check rotation.)';
-      confidenceEl.textContent = cleanedText ? `Accuracy: ${conf}%` : '';
-      confidenceEl.className = conf >= 75 ? 'high' : (conf < 50 ? 'low' : '');
+    output.value = cleanedText || '(No text detected. Try rotating the image or adjusting contrast.)';
+    confidenceEl.textContent = cleanedText ? `Accuracy: ${conf}%` : '';
+    confidenceEl.className = conf >= 75 ? 'high' : (conf < 50 ? 'low' : '');
 
-      renderEntities(cleanedText);
+    renderEntities(cleanedText);
 
-      status.style.display = 'none'; resultWrap.style.display = 'block';
-      // Smooth scroll right to the text box
-      resultWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (err) {
-      statusText.textContent = 'Error: ' + err.message;
-    } finally {
-      runBtn.disabled = false;
-    }
-  }, 'image/png');
+    status.style.display = 'none'; resultWrap.style.display = 'block';
+    resultWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+  } catch (err) {
+    statusText.textContent = 'Error: ' + (err.message || 'AI failed to load. Please check your network connection.');
+    statusText.classList.add('error-text');
+    console.error(err);
+  } finally {
+    runBtn.disabled = false;
+  }
 });
 
 function cleanText(raw) {
@@ -543,7 +540,7 @@ function renderEntities(text) {
   });
 }
 
-// 6. Outputs & Interactions
+// 6. Resets and Interactions
 copyBtn.addEventListener('click', () => copyToClipboard(output.value));
 downloadBtn.addEventListener('click', () => {
   const a = document.createElement('a');
@@ -558,7 +555,7 @@ shareBtn.addEventListener('click', async () => {
 resetBtn.addEventListener('click', () => {
   fileInput.value = ''; cameraInput.value = ''; baseImage = null;
   previewWrap.style.display = 'none'; resultWrap.style.display = 'none'; status.style.display = 'none'; output.value = '';
-  inputSection.style.display = 'block'; // Show inputs again
+  inputSection.style.display = 'block'; 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
