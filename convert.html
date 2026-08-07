@@ -346,11 +346,6 @@ document.getElementById('pvClose').onclick = ()=> document.getElementById('pvMod
 document.getElementById('pvPrev').onclick = ()=>{ if(pvState.page>0){ pvState.page--; renderPreviewPage(); } };
 document.getElementById('pvNext').onclick = ()=>{ if(pvState.page < pvState.item.pageData.length-1){ pvState.page++; renderPreviewPage(); } };
 
-// Some PDF generators bundle an entire visual row ("1   Rs 349...   998413   1   349.00")
-// into a single text item with wide internal whitespace, instead of one item per column.
-// Cell-splitting only looks at gaps BETWEEN items, so it's blind to this. Detect runs of 2+
-// spaces inside a single item's string and split it into positioned sub-items so column
-// detection can see them.
 function expandItem(it){
   if(!it.str || !/ {2,}/.test(it.str)) return [it];
   const len = it.str.length;
@@ -385,15 +380,6 @@ function groupLines(items){
   return mergeStaggeredRows(lines);
 }
 
-// Some cells (e.g. a header cell whose label wraps to two words stacked vertically, like
-// "Sr." over "No.") get vertically centered slightly differently than their neighbors, so
-// pdf.js reports them a few points off in y even though they're visually the same table row.
-// A genuine new paragraph line is usually a full line-height apart (~11-14pt in most PDFs);
-// these stray offsets are typically about half that. So: chain-merge lines that are within a
-// small vertical gap of each other (rolling, so two small gaps in a row still combine), folding
-// any item that horizontally overlaps an existing item (a true wrapped continuation within one
-// cell, e.g. "No." under "Sr.") into that item's text, and adding any non-overlapping item as a
-// new column (a genuine side-by-side cell that just landed a few points off).
 function mergeStaggeredRows(lines){
   const THRESH = 8;
   const merged = [];
@@ -454,9 +440,6 @@ function mergeRuns(items){
 function getCells(line){
   const items = line.items;
   if(items.length===0) return [];
-  // Use average character width (item width / string length), not font height, to decide what
-  // counts as a "column gap" vs a normal word space — height is a poor proxy for horizontal
-  // spacing, especially with bold/condensed fonts or small numeric columns.
   let totalW=0, totalLen=0;
   items.forEach(it=>{ totalW += (it.width||0); totalLen += Math.max(1,(it.str||'').length); });
   const avgCharW = totalLen>0 ? (totalW/totalLen) : 5;
@@ -471,44 +454,84 @@ function getCells(line){
   cells.push(cur);
   return cells;
 }
+
 function alignmentScore(a,b){
   const tol=13;
   let matches=0;
   b.forEach(cb=>{ if(a.some(ca=>Math.abs(ca.x-cb.x)<=tol)) matches++; });
   return matches / Math.max(a.length,b.length);
 }
+
 function buildTableBlock(bufferCells){
-  // Cluster by horizontal SPAN overlap, not left-edge distance — a right-aligned numeric value
-  // and its left-aligned header label can start at very different x while still belonging to
-  // the same visual column, as long as their spans overlap (e.g. a "Taxable Amount" header vs
-  // its right-aligned currency value below it).
+  // 1. Find the maximum cell count to define the base grid
+  const maxCells = Math.max(...bufferCells.map(row => row.length));
   const spans = [];
-  bufferCells.forEach(row=>row.forEach(c=>{
-    const lo = Math.min(...c.items.map(it=>it.x));
-    const hi = Math.max(...c.items.map(it=>it.x+it.width));
-    spans.push({cell:c, lo, hi});
-  }));
-  spans.sort((a,b)=>a.lo-b.lo);
-  const groups = [];
-  spans.forEach(s=>{
-    const g = groups.find(g => s.lo <= g.hi && s.hi >= g.lo);
-    if(g){ g.hi = Math.max(g.hi, s.hi); g.lo = Math.min(g.lo, s.lo); }
-    else groups.push({lo: s.lo, hi: s.hi});
+  
+  bufferCells.forEach(row=>{
+    // 2. Filter out colspans (like "Total" rows) to accurately find base columns
+    if(row.length >= maxCells - 1){
+      row.forEach(c=>{
+        const lo = Math.min(...c.items.map(it=>it.x));
+        const hi = Math.max(...c.items.map(it=>it.x+it.width));
+        spans.push({cell:c, lo, hi});
+      });
+    }
   });
-  groups.sort((a,b)=>a.lo-b.lo);
+
+  // Fallback if filtering removed all rows
+  if(spans.length === 0){
+    bufferCells.forEach(row=>row.forEach(c=>{
+      const lo = Math.min(...c.items.map(it=>it.x));
+      const hi = Math.max(...c.items.map(it=>it.x+it.width));
+      spans.push({cell:c, lo, hi});
+    }));
+  }
+
+  spans.sort((a,b)=>a.lo-b.lo);
+  let groups = [];
+  spans.forEach(s => groups.push({lo: s.lo, hi: s.hi}));
+  
+  // 3. Iteratively merge overlapping spans without infinitely expanding them
+  let changed = true;
+  while(changed){
+    changed = false;
+    groups.sort((a,b) => a.lo - b.lo);
+    const next = [];
+    for(let i=0; i<groups.length; i++){
+      if(next.length > 0){
+        let prev = next[next.length - 1];
+        if(groups[i].lo <= prev.hi){
+          prev.hi = Math.max(prev.hi, groups[i].hi);
+          prev.lo = Math.min(prev.lo, groups[i].lo);
+          changed = true;
+          continue;
+        }
+      }
+      next.push(groups[i]);
+    }
+    groups = next;
+  }
+
+  const numCols = groups.length;
   const rows = bufferCells.map(row=>{
     const rowCells = groups.map(()=>({items:[]}));
     row.forEach(c=>{
       const lo = Math.min(...c.items.map(it=>it.x));
       const hi = Math.max(...c.items.map(it=>it.x+it.width));
+      // Assign cell to the column cluster with the best overlap
       let bestIdx=0, bestOverlap=-Infinity;
-      groups.forEach((g,idx)=>{ const ov = Math.min(hi,g.hi) - Math.max(lo,g.lo); if(ov>bestOverlap){bestOverlap=ov; bestIdx=idx;} });
+      groups.forEach((g,idx)=>{
+        const ov = Math.min(hi,g.hi) - Math.max(lo,g.lo);
+        if(ov>bestOverlap){bestOverlap=ov; bestIdx=idx;}
+      });
       rowCells[bestIdx].items.push(...c.items);
     });
     return rowCells;
   });
-  return {type:'table', rows, numCols: groups.length};
+  
+  return {type:'table', rows, numCols};
 }
+
 function detectBlocks(lines, tablesEnabled){
   const blocks = [];
   let i = 0;
@@ -516,24 +539,41 @@ function detectBlocks(lines, tablesEnabled){
     if(tablesEnabled){
       const cells0 = getCells(lines[i]);
       if(cells0.length >= 2){
-        // Grow a run of consecutive multi-cell lines. Row-to-row x alignment is NOT required —
-        // form-style layouts (label/value pairs) often shift slightly per row when a value wraps,
-        // so we only require each line to have >=2 cells; buildTableBlock then clusters all the
-        // x-positions across the whole run to find the real columns.
         let j = i+1;
         const buffer = [cells0];
+        let expectedCols = cells0.length;
+        let badLines = 0;
+        let tempBuffer = [];
+
         while(j < lines.length){
           const c = getCells(lines[j]);
-          if(c.length >= 2){ buffer.push(c); j++; }
-          else break;
+          if(c.length >= 2){
+            // Break into a new table if the layout drastically changes (e.g., 2 cols to 7 cols)
+            if(Math.abs(c.length - expectedCols) >= 2 && buffer.length > 0){
+              break; 
+            }
+            buffer.push(...tempBuffer, c);
+            tempBuffer = [];
+            badLines = 0;
+            expectedCols = Math.max(expectedCols, c.length);
+            j++;
+          } else {
+            // Buffer up to 2 wrapped single-cell lines to prevent table disconnects
+            if(badLines < 2){
+              tempBuffer.push(c);
+              badLines++;
+              j++;
+            } else {
+              break;
+            }
+          }
         }
         if(buffer.length >= 2){
           const block = buildTableBlock(buffer);
-          // sanity cap: if clustering produced an implausible number of "columns" this probably
-          // wasn't a real table (e.g. justified body text with wide gaps) — fall back to paragraphs
-          if(block.numCols >= 2 && block.numCols <= 10){
+          // Increased hard cap to 15 to accommodate wider layouts
+          if(block.numCols >= 2 && block.numCols <= 15){ 
             blocks.push(block);
-            i = j;
+            i += buffer.length; // Advance index only by the successfully buffered lines
             continue;
           }
         }
