@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Image to Text (OCR)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2e38;
+    --accent: #6ee7b7;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  p.sub { color: var(--muted); margin-top: 0; margin-bottom: 24px; font-size: 0.9rem; }
+  .container { width: 100%; max-width: 640px; }
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    background: var(--panel);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #dropzone.dragover {
+    border-color: var(--accent);
+    background: #1c2129;
+  }
+  #dropzone p { margin: 6px 0; color: var(--muted); }
+  #fileInput, #cameraInput { display: none; }
+  .camera-row {
+    margin-top: 12px;
+    display: flex;
+    justify-content: center;
+  }
+  #cameraBtn {
+    width: 100%;
+  }
+  #cameraWrap {
+    display: none;
+    margin-top: 16px;
+    text-align: center;
+  }
+  #video {
+    width: 100%;
+    max-height: 320px;
+    border-radius: 8px;
+    background: #000;
+  }
+  #preview {
+    max-width: 100%;
+    max-height: 260px;
+    margin-top: 16px;
+    border-radius: 8px;
+    display: none;
+  }
+  #status {
+    margin-top: 16px;
+    font-size: 0.9rem;
+    color: var(--muted);
+    display: none;
+  }
+  progress {
+    width: 100%;
+    height: 8px;
+    margin-top: 8px;
+    accent-color: var(--accent);
+  }
+  #resultWrap { margin-top: 20px; display: none; }
+  #resultWrap h3 { margin-bottom: 8px; font-size: 1rem; }
+  textarea {
+    width: 100%;
+    min-height: 180px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.9rem;
+    resize: vertical;
+  }
+  .actions { display: flex; gap: 8px; margin-top: 10px; }
+  button {
+    background: var(--accent);
+    color: #0f1115;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  button.secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Image → Text</h1>
+    <p class="sub">Drop an image, paste one, or click to browse. Runs OCR entirely in your browser.</p>
+
+    <div id="dropzone">
+      <p><strong>Click to choose an image</strong></p>
+      <p>or drag & drop / paste it here</p>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <div class="camera-row">
+      <button id="cameraBtn" class="secondary" type="button">📷 Use camera</button>
+      <input type="file" id="cameraInput" accept="image/*" capture="environment">
+    </div>
+
+    <div id="cameraWrap">
+      <video id="video" autoplay playsinline></video>
+      <div class="actions">
+        <button id="captureBtn">Capture photo</button>
+        <button id="cancelCameraBtn" class="secondary">Cancel</button>
+      </div>
+    </div>
+
+    <img id="preview" alt="preview">
+
+    <div id="status">
+      <span id="statusText">Reading image…</span>
+      <progress id="progressBar" value="0" max="1"></progress>
+    </div>
+
+    <div id="resultWrap">
+      <h3>Extracted text</h3>
+      <textarea id="output" readonly></textarea>
+      <div class="actions">
+        <button id="copyBtn">Copy text</button>
+        <button id="resetBtn" class="secondary">Try another image</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const cameraBtn = document.getElementById('cameraBtn');
+const cameraInput = document.getElementById('cameraInput');
+const cameraWrap = document.getElementById('cameraWrap');
+const video = document.getElementById('video');
+const captureBtn = document.getElementById('captureBtn');
+const cancelCameraBtn = document.getElementById('cancelCameraBtn');
+const preview = document.getElementById('preview');
+let currentStream = null;
+const status = document.getElementById('status');
+const statusText = document.getElementById('statusText');
+const progressBar = document.getElementById('progressBar');
+const resultWrap = document.getElementById('resultWrap');
+const output = document.getElementById('output');
+const copyBtn = document.getElementById('copyBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+dropzone.addEventListener('click', () => fileInput.click());
+
+dropzone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropzone.classList.add('dragover');
+});
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+document.addEventListener('paste', (e) => {
+  const items = e.clipboardData.items;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      handleFile(item.getAsFile());
+      break;
+    }
+  }
+});
+
+resetBtn.addEventListener('click', () => {
+  fileInput.value = '';
+  cameraInput.value = '';
+  preview.style.display = 'none';
+  resultWrap.style.display = 'none';
+  status.style.display = 'none';
+  output.value = '';
+});
+
+cameraInput.addEventListener('change', () => {
+  if (cameraInput.files.length) handleFile(cameraInput.files[0]);
+});
+
+cameraBtn.addEventListener('click', async () => {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    cameraInput.click();
+    return;
+  }
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }
+    });
+    video.srcObject = currentStream;
+    cameraWrap.style.display = 'block';
+    preview.style.display = 'none';
+    resultWrap.style.display = 'none';
+  } catch (err) {
+    // Permission denied, no camera access, or unsupported — fall back to native picker
+    cameraInput.click();
+  }
+});
+
+function stopCamera() {
+  if (currentStream) {
+    currentStream.getTracks().forEach((t) => t.stop());
+    currentStream = null;
+  }
+  cameraWrap.style.display = 'none';
+}
+
+cancelCameraBtn.addEventListener('click', stopCamera);
+
+captureBtn.addEventListener('click', () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  canvas.toBlob((blob) => {
+    stopCamera();
+    if (blob) {
+      const file = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+      handleFile(file);
+    }
+  }, 'image/jpeg', 0.92);
+});
+
+copyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(output.value);
+    copyBtn.textContent = 'Copied!';
+    setTimeout(() => (copyBtn.textContent = 'Copy text'), 1200);
+  } catch {
+    output.select();
+    document.execCommand('copy');
+  }
+});
+
+async function handleFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+
+  const url = URL.createObjectURL(file);
+  preview.src = url;
+  preview.style.display = 'block';
+  resultWrap.style.display = 'none';
+  status.style.display = 'block';
+  statusText.textContent = 'Loading OCR engine…';
+  progressBar.value = 0;
+
+  try {
+    const result = await Tesseract.recognize(file, 'eng', {
+      logger: (m) => {
+        if (m.status) {
+          statusText.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
+        }
+        if (typeof m.progress === 'number') {
+          progressBar.value = m.progress;
+        }
+      }
+    });
+
+    output.value = result.data.text.trim() || '(No text detected in this image.)';
+    status.style.display = 'none';
+    resultWrap.style.display = 'block';
+  } catch (err) {
+    statusText.textContent = 'Error: ' + err.message;
+  }
+}
+</script>
+</body>
+</html>
