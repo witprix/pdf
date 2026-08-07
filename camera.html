@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<!-- Enhanced viewport to prevent mobile zooming on double-tap -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0f1115">
 <title>Enhanced Image to Text (OCR)</title>
@@ -11,7 +10,7 @@
   :root {
     --bg: #0f1115;
     --panel: #171a21;
-    --panel2: #1c2129;
+    --panel2: #222732;
     --border: #2a2e38;
     --accent: #6ee7b7;
     --accent-hover: #34d399;
@@ -22,7 +21,7 @@
     --safe-t: env(safe-area-inset-top, 0px);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { overflow-x: hidden; touch-action: manipulation; }
+  html, body { overflow-x: hidden; touch-action: manipulation; scroll-behavior: smooth; }
   body {
     margin: 0;
     min-height: 100vh;
@@ -32,178 +31,104 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: max(20px, var(--safe-t)) 14px calc(24px + var(--safe-b));
+    padding: max(20px, var(--safe-t)) 14px calc(30px + var(--safe-b));
   }
-  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; text-align: center; }
   p.sub { color: var(--muted); margin: 0 0 20px; font-size: 0.9rem; text-align: center; }
   .container { width: 100%; max-width: 640px; }
 
-  /* Primary input row */
-  .input-row { display: flex; gap: 12px; }
+  /* Input row */
+  .input-row { display: flex; gap: 12px; margin-bottom: 12px; }
   .big-btn {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 24px 10px;
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    background: var(--panel);
-    color: var(--text);
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    padding: 20px 10px; border-radius: 16px; border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background 0.2s;
   }
   .big-btn .icon { font-size: 1.8rem; }
   .big-btn:active, .big-btn:hover { background: var(--panel2); }
-
-  #dropzone {
-    margin-top: 12px;
-    border: 2px dashed var(--border);
-    border-radius: 16px;
-    padding: 20px;
-    text-align: center;
-    background: var(--panel);
-    cursor: pointer;
-    font-size: 0.9rem;
-    color: var(--muted);
-    transition: all 0.2s;
-  }
-  #dropzone.dragover { border-color: var(--accent); background: var(--panel2); color: var(--accent); }
+  
   #fileInput, #cameraInput { display: none; }
 
-  /* Settings Row */
-  .settings-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 16px;
-    background: var(--panel);
-    padding: 12px 16px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
+  /* Collapsible Details Sections */
+  details {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 12px; overflow: hidden;
   }
-  .settings-row label { font-size: 0.85rem; font-weight: 600; }
+  summary {
+    padding: 14px 16px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    list-style: none; display: flex; justify-content: space-between; align-items: center;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: '▼'; font-size: 0.7rem; color: var(--muted); transition: transform 0.2s; }
+  details[open] summary::after { transform: rotate(180deg); }
+  .details-content { padding: 0 16px 16px 16px; border-top: 1px solid var(--border); margin-top: 8px; padding-top: 16px;}
+
   select {
-    background: var(--panel2);
-    color: var(--text);
-    border: 1px solid var(--border);
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    outline: none;
+    width: 100%; background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    padding: 10px 12px; border-radius: 8px; font-size: 0.95rem; outline: none; margin-top: 8px;
   }
 
-  /* Camera live view */
-  #cameraWrap { display: none; margin-top: 16px; text-align: center; position: relative; }
-  #video {
-    width: 100%;
-    max-height: 60vh;
-    border-radius: 16px;
-    background: #000;
-    object-fit: contain;
+  /* FULL SCREEN Camera live view */
+  #cameraWrap {
+    display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: #000; z-index: 9999; flex-direction: column;
   }
+  #video { flex: 1; width: 100%; height: 100%; object-fit: contain; }
   .camera-controls {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 24px;
-    margin-top: 16px;
+    position: absolute; bottom: calc(20px + var(--safe-b)); left: 0; width: 100%;
+    display: flex; justify-content: space-evenly; align-items: center;
+    padding: 20px; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
   }
-  #switchCamBtn, #cancelCameraBtn {
-    background: var(--panel2);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 50%;
-    width: 54px;
-    height: 54px;
-    font-size: 1.2rem;
-    cursor: pointer;
+  .cam-btn-small {
+    background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 50%;
+    width: 50px; height: 50px; font-size: 1.2rem; cursor: pointer; backdrop-filter: blur(5px);
   }
   #captureBtn {
-    width: 76px;
-    height: 76px;
-    border-radius: 50%;
-    background: var(--accent);
-    border: 4px solid #fff2;
-    cursor: pointer;
+    width: 72px; height: 72px; border-radius: 50%; background: var(--accent);
+    border: 4px solid rgba(255,255,255,0.3); cursor: pointer;
   }
 
   /* Preview + editing */
-  #previewWrap { display: none; margin-top: 20px; }
+  #previewWrap { display: none; margin-top: 16px; }
   #previewCanvas {
-    max-width: 100%;
-    max-height: 40vh;
-    display: block;
-    margin: 0 auto;
-    border-radius: 12px;
-    background: #000;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    max-width: 100%; max-height: 45vh; display: block; margin: 0 auto;
+    border-radius: 12px; background: #000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   }
-  .edit-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 16px;
-    justify-content: center;
-  }
+  
+  .primary-tools { display: flex; justify-content: center; gap: 8px; margin: 16px 0; }
+  
   .chip-btn {
-    background: var(--panel2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 20px;
-    padding: 10px 16px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.2s;
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 20px; padding: 10px 16px; font-size: 0.85rem; cursor: pointer; font-weight: 500;
   }
   .chip-btn.active { background: var(--accent); color: #0f1115; border-color: var(--accent); font-weight: 700; }
-  .chip-btn:active { transform: scale(0.96); }
   
-  .controls-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin-top: 16px;
-    background: var(--panel);
-    padding: 16px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-  }
-  .slider-row { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: var(--muted); }
+  /* Sliders & Toggles inside details */
+  .slider-row { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: var(--muted); margin-bottom: 16px; }
   .slider-row span { min-width: 70px; }
   .slider-row input[type=range] { flex: 1; accent-color: var(--accent); height: 6px; }
   
-  .toggle-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; margin-top: 8px;}
+  .toggle-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
   .toggle-btn { 
     background: var(--panel2); color: var(--text); border: 1px solid var(--border);
     padding: 8px 16px; border-radius: 20px; cursor: pointer; font-weight: 600;
   }
   .toggle-btn.active { background: var(--accent); color: #0f1115; }
+  
+  .edit-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
-  .mode-label { font-size: 0.85rem; color: var(--text); font-weight: 600; margin: 20px 0 10px; text-align: center; }
-
+  /* Giant Action Button */
   #runBtn {
-    width: 100%;
-    margin-top: 20px;
-    background: var(--accent);
-    color: #0f1115;
-    border: none;
-    border-radius: 14px;
-    padding: 16px;
-    font-weight: 700;
-    font-size: 1.05rem;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(110, 231, 183, 0.2);
+    width: 100%; margin-top: 12px; background: var(--accent); color: #0f1115;
+    border: none; border-radius: 14px; padding: 18px; font-weight: 800; font-size: 1.1rem;
+    cursor: pointer; box-shadow: 0 4px 15px rgba(110, 231, 183, 0.2); transition: transform 0.1s;
   }
+  #runBtn:active { transform: scale(0.98); }
   #runBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
   /* Status */
   #status { margin-top: 20px; font-size: 0.95rem; color: var(--accent); display: none; text-align: center; font-weight: 600; }
-  progress { width: 100%; height: 10px; margin-top: 10px; accent-color: var(--accent); border-radius: 8px; }
+  progress { width: 100%; height: 8px; margin-top: 10px; accent-color: var(--accent); border-radius: 8px; }
 
   /* Results */
   #resultWrap { margin-top: 24px; display: none; }
@@ -214,158 +139,127 @@
   #confidence.low { color: var(--danger); }
 
   textarea {
-    width: 100%;
-    min-height: 200px;
-    background: var(--panel);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-    font-size: 1rem;
-    line-height: 1.6;
-    resize: vertical;
-    font-family: inherit;
+    width: 100%; min-height: 220px; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 1rem;
+    line-height: 1.6; resize: vertical; font-family: inherit;
   }
 
-  /* Detected entities */
+  /* Extracted Entities */
   #entities { margin-top: 20px; display: none; }
   #entities h4 { font-size: 0.9rem; color: var(--muted); margin: 0 0 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
   .entity-list { display: flex; flex-direction: column; gap: 10px; }
   .entity {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 12px 16px;
-    gap: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; gap: 12px;
   }
   .entity-content { flex: 1; min-width: 0; }
   .entity a { color: var(--accent); text-decoration: none; font-size: 0.95rem; font-weight: 600; display: block; word-break: break-all; }
   .entity span.tag { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; display: block; margin-bottom: 4px; font-weight: 700;}
   .entity button {
-    background: var(--panel2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 8px 14px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    flex-shrink: 0;
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 14px; font-size: 0.8rem; font-weight: 600; cursor: pointer; flex-shrink: 0;
   }
 
   .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
   .actions button {
-    background: var(--accent);
-    color: #0f1115;
-    border: none;
-    border-radius: 12px;
-    padding: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    font-size: 0.95rem;
+    background: var(--accent); color: #0f1115; border: none; border-radius: 12px;
+    padding: 14px; font-weight: 700; cursor: pointer; font-size: 0.95rem;
   }
-  .actions button.secondary {
-    background: transparent;
-    color: var(--text);
-    border: 1px solid var(--border);
-  }
+  .actions button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
   .actions button.full-width { grid-column: span 2; }
   
   .toast {
-    position: fixed;
-    bottom: calc(30px + var(--safe-b));
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--accent);
-    color: #0f1115;
-    padding: 12px 24px;
-    border-radius: 30px;
-    font-size: 0.95rem;
-    font-weight: 700;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s;
-    z-index: 100;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    position: fixed; bottom: calc(30px + var(--safe-b)); left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #0f1115; padding: 12px 24px; border-radius: 30px;
+    font-size: 0.95rem; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 100;
   }
   .toast.show { opacity: 1; }
 </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Image → Text</h1>
+  <div class="container" id="mainContainer">
+    <h1>Scan to Text</h1>
     <p class="sub">Fast, secure, on-device text extraction.</p>
 
-    <div class="input-row">
-      <button class="big-btn" id="cameraBtn" type="button"><span class="icon">📷</span>Use Camera</button>
-      <button class="big-btn" id="chooseBtn" type="button"><span class="icon">🖼️</span>Gallery / File</button>
-    </div>
-    
-    <div class="settings-row">
-      <label for="langSelect">Language:</label>
-      <select id="langSelect">
-        <option value="eng">English</option>
-        <option value="spa">Spanish</option>
-        <option value="fra">French</option>
-        <option value="deu">German</option>
-      </select>
+    <!-- Initial Input Area -->
+    <div id="inputSection">
+      <div class="input-row">
+        <button class="big-btn" id="cameraBtn" type="button"><span class="icon">📷</span>Use Camera</button>
+        <button class="big-btn" id="chooseBtn" type="button"><span class="icon">🖼️</span>Gallery / File</button>
+      </div>
+      
+      <details>
+        <summary>Scan Settings (Language)</summary>
+        <div class="details-content">
+          <label for="langSelect" style="font-size: 0.85rem; color: var(--muted);">Select Language:</label>
+          <select id="langSelect">
+            <option value="eng">English</option>
+            <option value="spa">Spanish</option>
+            <option value="fra">French</option>
+            <option value="deu">German</option>
+          </select>
+        </div>
+      </details>
     </div>
 
+    <!-- Hidden Inputs -->
     <input type="file" id="fileInput" accept="image/*">
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
-    <div id="dropzone">Drag & drop an image here, or paste (Ctrl/Cmd+V)</div>
 
+    <!-- Fullscreen Camera Overlay -->
     <div id="cameraWrap">
       <video id="video" autoplay playsinline muted></video>
       <div class="camera-controls">
-        <button id="cancelCameraBtn" type="button">✕</button>
+        <button id="cancelCameraBtn" class="cam-btn-small" type="button">✕</button>
         <button id="captureBtn" type="button"></button>
-        <button id="switchCamBtn" type="button">🔄</button>
+        <button id="switchCamBtn" class="cam-btn-small" type="button">🔄</button>
       </div>
     </div>
 
+    <!-- Preview & Edit Area -->
     <div id="previewWrap">
       <canvas id="previewCanvas"></canvas>
 
-      <div class="edit-toolbar">
-        <button class="chip-btn" id="rotateLeftBtn" type="button">⟲ Left</button>
-        <button class="chip-btn" id="rotateRightBtn" type="button">⟳ Right</button>
-        <button class="chip-btn" id="resetEditBtn" type="button">Reset</button>
+      <div class="primary-tools">
+        <button class="chip-btn" id="rotateLeftBtn" type="button">⟲ Rotate Left</button>
+        <button class="chip-btn" id="rotateRightBtn" type="button">⟳ Rotate Right</button>
       </div>
       
-      <div class="controls-grid">
-        <div class="slider-row">
-          <span>Contrast</span>
-          <input type="range" id="contrastSlider" min="0" max="100" value="35">
+      <details id="adjustmentsDetails">
+        <summary>Advanced Adjustments</summary>
+        <div class="details-content">
+          <div class="slider-row">
+            <span>Contrast</span>
+            <input type="range" id="contrastSlider" min="-50" max="50" value="0">
+          </div>
+          <div class="slider-row">
+            <span>Brightness</span>
+            <input type="range" id="brightnessSlider" min="-50" max="50" value="0">
+          </div>
+          <div class="toggle-row">
+            <span>Enhance Document</span>
+            <button class="toggle-btn" id="bwFilterBtn" type="button">B/W Filter OFF</button>
+          </div>
+          
+          <div style="margin-top: 16px; font-size: 0.85rem; color: var(--muted);">Formatting:</div>
+          <div class="edit-toolbar" id="modeToolbar">
+            <button class="chip-btn active" data-mode="auto" type="button">Auto-detect</button>
+            <button class="chip-btn" data-mode="document" type="button">Block of Text</button>
+            <button class="chip-btn" data-mode="line" type="button">Single Line</button>
+          </div>
         </div>
-        <div class="slider-row">
-          <span>Brightness</span>
-          <input type="range" id="brightnessSlider" min="-50" max="50" value="0">
-        </div>
-        <div class="toggle-row">
-          <span>Enhance Document</span>
-          <button class="toggle-btn" id="bwFilterBtn" type="button">B/W Filter OFF</button>
-        </div>
-      </div>
+      </details>
 
-      <div class="mode-label">Document Formatting</div>
-      <div class="edit-toolbar" id="modeToolbar">
-        <button class="chip-btn active" data-mode="auto" type="button">Auto-detect</button>
-        <button class="chip-btn" data-mode="document" type="button">Block of Text</button>
-        <button class="chip-btn" data-mode="line" type="button">Single Line</button>
-      </div>
-
-      <button id="runBtn" type="button">Extract Text</button>
+      <button id="runBtn" type="button">✨ Extract Text</button>
     </div>
 
+    <!-- Processing Status -->
     <div id="status">
       <span id="statusText">Reading image…</span>
       <progress id="progressBar" value="0" max="1"></progress>
     </div>
 
+    <!-- Results Area -->
     <div id="resultWrap">
       <div class="result-header">
         <h3>Extracted Text</h3>
@@ -393,12 +287,12 @@
 // UI Elements
 const chooseBtn = document.getElementById('chooseBtn'), fileInput = document.getElementById('fileInput');
 const cameraBtn = document.getElementById('cameraBtn'), cameraInput = document.getElementById('cameraInput');
-const dropzone = document.getElementById('dropzone'), langSelect = document.getElementById('langSelect');
+const langSelect = document.getElementById('langSelect'), inputSection = document.getElementById('inputSection');
 const cameraWrap = document.getElementById('cameraWrap'), video = document.getElementById('video');
 const captureBtn = document.getElementById('captureBtn'), cancelCameraBtn = document.getElementById('cancelCameraBtn'), switchCamBtn = document.getElementById('switchCamBtn');
 const previewWrap = document.getElementById('previewWrap'), previewCanvas = document.getElementById('previewCanvas');
 const ctx = previewCanvas.getContext('2d', { willReadFrequently: true });
-const rotateLeftBtn = document.getElementById('rotateLeftBtn'), rotateRightBtn = document.getElementById('rotateRightBtn'), resetEditBtn = document.getElementById('resetEditBtn');
+const rotateLeftBtn = document.getElementById('rotateLeftBtn'), rotateRightBtn = document.getElementById('rotateRightBtn');
 const contrastSlider = document.getElementById('contrastSlider'), brightnessSlider = document.getElementById('brightnessSlider'), bwFilterBtn = document.getElementById('bwFilterBtn');
 const modeToolbar = document.getElementById('modeToolbar'), runBtn = document.getElementById('runBtn');
 const status = document.getElementById('status'), statusText = document.getElementById('statusText'), progressBar = document.getElementById('progressBar');
@@ -406,6 +300,7 @@ const resultWrap = document.getElementById('resultWrap'), output = document.getE
 const entities = document.getElementById('entities'), entityList = document.getElementById('entityList');
 const copyBtn = document.getElementById('copyBtn'), shareBtn = document.getElementById('shareBtn');
 const downloadBtn = document.getElementById('downloadBtn'), resetBtn = document.getElementById('resetBtn'), toast = document.getElementById('toast');
+const adjustmentsDetails = document.getElementById('adjustmentsDetails');
 
 // State Variables
 let currentStream = null, facingMode = 'environment', baseImage = null;
@@ -416,23 +311,12 @@ chooseBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFile(fileInput.files[0]); });
 cameraInput.addEventListener('change', () => { if (cameraInput.files.length) loadFile(cameraInput.files[0]); });
 
-dropzone.addEventListener('click', () => fileInput.click());
-dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
-dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-dropzone.addEventListener('drop', (e) => {
-  e.preventDefault(); dropzone.classList.remove('dragover');
-  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
-});
-document.addEventListener('paste', (e) => {
-  const items = e.clipboardData?.items || [];
-  for (const item of items) { if (item.type.startsWith('image/')) { loadFile(item.getAsFile()); break; } }
-});
-
-// 2. Camera Handling
+// 2. Fullscreen Camera Handling
 cameraBtn.addEventListener('click', async () => {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return cameraInput.click();
   await startCamera();
 });
+
 async function startCamera() {
   stopCamera();
   try {
@@ -440,13 +324,19 @@ async function startCamera() {
       video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
     video.srcObject = currentStream;
-    cameraWrap.style.display = 'block'; previewWrap.style.display = 'none'; resultWrap.style.display = 'none';
-  } catch (err) { cameraInput.click(); }
+    cameraWrap.style.display = 'flex'; // Use flex for fullscreen overlay layout
+    document.body.style.overflow = 'hidden'; // Prevent background scrolling
+  } catch (err) { 
+    cameraInput.click(); // Fallback to native camera input
+  }
 }
+
 function stopCamera() {
   if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
   cameraWrap.style.display = 'none';
+  document.body.style.overflow = 'auto';
 }
+
 cancelCameraBtn.addEventListener('click', stopCamera);
 switchCamBtn.addEventListener('click', () => { facingMode = facingMode === 'environment' ? 'user' : 'environment'; startCamera(); });
 captureBtn.addEventListener('click', () => {
@@ -459,15 +349,17 @@ captureBtn.addEventListener('click', () => {
   }, 'image/jpeg', 0.95);
 });
 
-// 3. Image Processing & Filters
+// 3. Image Processing & Fixed Color Filters
 function loadFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
   const img = new Image();
   img.onload = () => {
     baseImage = img;
-    rotation = 0; contrastSlider.value = 35; brightnessSlider.value = 0; applyBwFilter = false;
+    rotation = 0; contrastSlider.value = 0; brightnessSlider.value = 0; applyBwFilter = false; // Reset to defaults
     updateBwBtnUI();
+    inputSection.style.display = 'none'; // Hide initial buttons to save space
     previewWrap.style.display = 'block'; resultWrap.style.display = 'none';
+    adjustmentsDetails.open = false; // Collapse advanced options by default
     renderPreview();
     previewWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -478,7 +370,7 @@ function renderPreview() {
   if (!baseImage) return;
   const swapped = rotation % 180 !== 0;
   const w = swapped ? baseImage.height : baseImage.width, h = swapped ? baseImage.width : baseImage.height;
-  const scale = Math.min(1, 2000 / Math.max(w, h)); // Cap for processing speed
+  const scale = Math.min(1, 2000 / Math.max(w, h)); 
   previewCanvas.width = Math.round(w * scale); previewCanvas.height = Math.round(h * scale);
 
   ctx.save();
@@ -487,35 +379,54 @@ function renderPreview() {
   const drawW = (swapped ? h : w) * scale, drawH = (swapped ? w : h) * scale;
   ctx.drawImage(baseImage, -drawW / 2, -drawH / 2, drawW, drawH);
   ctx.restore();
+  
   applyImageAdjustments();
 }
 
 function applyImageAdjustments() {
-  const contrast = parseFloat(contrastSlider.value), brightness = parseFloat(brightnessSlider.value);
+  const contrast = parseFloat(contrastSlider.value); // -50 to 50
+  const brightness = parseFloat(brightnessSlider.value); // -50 to 50
   const imgData = ctx.getImageData(0, 0, previewCanvas.width, previewCanvas.height);
   const d = imgData.data;
-  const c = (contrast / 100) * 2 + 1; 
-  const factor = (259 * (c * 128 + 255)) / (255 * (259 - c * 128));
+  
+  // Standard RGB contrast factor formula
+  const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
   
   for (let i = 0; i < d.length; i += 4) {
-    const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    let v = factor * (gray - 128) + 128 + brightness;
-    v = Math.max(0, Math.min(255, v));
+    let r = d[i], g = d[i+1], b = d[i+2];
     
-    if (applyBwFilter) {
-      v = v > 140 ? 255 : 0; // High contrast threshold for document scanning
+    // Apply contrast and brightness adjustments directly to the color channels
+    if (contrast !== 0 || brightness !== 0) {
+      r = factor * (r - 128) + 128 + brightness;
+      g = factor * (g - 128) + 128 + brightness;
+      b = factor * (b - 128) + 128 + brightness;
     }
-    d[i] = d[i + 1] = d[i + 2] = v;
+    
+    // ONLY force grayscale and threshold if the B/W filter is explicitly ON
+    if (applyBwFilter) {
+      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      const v = gray > 140 ? 255 : 0; // High contrast threshold for reading
+      d[i] = d[i+1] = d[i+2] = v;
+    } else {
+      // Otherwise, clamp color values and keep the color
+      d[i] = Math.max(0, Math.min(255, r));
+      d[i+1] = Math.max(0, Math.min(255, g));
+      d[i+2] = Math.max(0, Math.min(255, b));
+    }
   }
   ctx.putImageData(imgData, 0, 0);
 }
 
 rotateLeftBtn.addEventListener('click', () => { rotation = (rotation + 270) % 360; renderPreview(); });
 rotateRightBtn.addEventListener('click', () => { rotation = (rotation + 90) % 360; renderPreview(); });
-resetEditBtn.addEventListener('click', () => { rotation = 0; contrastSlider.value = 35; brightnessSlider.value = 0; applyBwFilter = false; updateBwBtnUI(); renderPreview(); });
 contrastSlider.addEventListener('input', renderPreview);
 brightnessSlider.addEventListener('input', renderPreview);
-bwFilterBtn.addEventListener('click', () => { applyBwFilter = !applyBwFilter; updateBwBtnUI(); renderPreview(); });
+
+bwFilterBtn.addEventListener('click', () => { 
+  applyBwFilter = !applyBwFilter; 
+  updateBwBtnUI(); 
+  renderPreview(); 
+});
 
 function updateBwBtnUI() {
     bwFilterBtn.classList.toggle('active', applyBwFilter);
@@ -530,14 +441,18 @@ modeToolbar.addEventListener('click', (e) => {
   selectedMode = btn.dataset.mode;
 });
 
-// 4. Advanced OCR Execution (Using Worker API for proper PSM and Language mapping)
+// 4. Extract Text
 const PSM_MAP = { auto: 3, document: 6, line: 7 };
 
 runBtn.addEventListener('click', async () => {
   runBtn.disabled = true;
+  adjustmentsDetails.open = false; // Collapse settings while running
   status.style.display = 'block'; resultWrap.style.display = 'none';
-  statusText.textContent = 'Initializing Engine...';
+  statusText.textContent = 'Initializing AI...';
   progressBar.value = 0;
+  
+  // Auto-scroll to progress bar
+  status.scrollIntoView({ behavior: 'smooth', block: 'center' });
   
   const lang = langSelect.value;
   const psm = PSM_MAP[selectedMode] || 3;
@@ -553,7 +468,6 @@ runBtn.addEventListener('click', async () => {
       
       await worker.loadLanguage(lang);
       await worker.initialize(lang);
-      // Properly applying PSM via worker parameter to drastically improve accuracy
       await worker.setParameters({ tessedit_pageseg_mode: psm });
       
       const { data: { text, confidence } } = await worker.recognize(blob);
@@ -562,13 +476,14 @@ runBtn.addEventListener('click', async () => {
       const cleanedText = cleanText(text);
       const conf = Math.round(confidence || 0);
 
-      output.value = cleanedText || '(No text detected — try turning ON the B/W filter or adjust Contrast.)';
+      output.value = cleanedText || '(No text detected — try turning ON the B/W filter or check rotation.)';
       confidenceEl.textContent = cleanedText ? `Accuracy: ${conf}%` : '';
       confidenceEl.className = conf >= 75 ? 'high' : (conf < 50 ? 'low' : '');
 
       renderEntities(cleanedText);
 
       status.style.display = 'none'; resultWrap.style.display = 'block';
+      // Smooth scroll right to the text box
       resultWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
       statusText.textContent = 'Error: ' + err.message;
@@ -578,13 +493,12 @@ runBtn.addEventListener('click', async () => {
   }, 'image/png');
 });
 
-// Structural text cleaner
 function cleanText(raw) {
   return raw.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trimEnd())
     .join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// 5. Enhanced Entity Extraction (Added Dates and Currencies)
+// 5. Entity Extraction
 function renderEntities(text) {
   const phoneRe = /(\+?\d[\d\s().-]{8,}\d)/g;
   const emailRe = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -618,10 +532,7 @@ function renderEntities(text) {
       : `<a style="color:var(--text); text-decoration:none;">${item.value}</a>`;
       
     row.innerHTML = `
-      <div class="entity-content">
-        <span class="tag">${item.type}</span>
-        ${linkHTML}
-      </div>
+      <div class="entity-content"><span class="tag">${item.type}</span>${linkHTML}</div>
       <button type="button" data-copy="${item.value.replace(/"/g, '&quot;')}">Copy</button>
     `;
     entityList.appendChild(row);
@@ -643,9 +554,11 @@ shareBtn.addEventListener('click', async () => {
   if (navigator.share) { try { await navigator.share({ text: output.value }); } catch {} } 
   else { copyToClipboard(output.value); }
 });
+
 resetBtn.addEventListener('click', () => {
   fileInput.value = ''; cameraInput.value = ''; baseImage = null;
   previewWrap.style.display = 'none'; resultWrap.style.display = 'none'; status.style.display = 'none'; output.value = '';
+  inputSection.style.display = 'block'; // Show inputs again
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
@@ -657,6 +570,7 @@ async function copyToClipboard(text) {
     ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Copied to clipboard!');
   }
 }
+
 function showToast(msg) {
   toast.textContent = msg; toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 2000);
