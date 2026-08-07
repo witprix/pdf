@@ -463,64 +463,40 @@ function alignmentScore(a,b){
 }
 
 function buildTableBlock(bufferCells){
-  // 1. Find the maximum cell count to define the base grid
   const maxCells = Math.max(...bufferCells.map(row => row.length));
-  const spans = [];
   
-  bufferCells.forEach(row=>{
-    // 2. Filter out colspans (like "Total" rows) to accurately find base columns
-    if(row.length >= maxCells - 1){
-      row.forEach(c=>{
-        const lo = Math.min(...c.items.map(it=>it.x));
-        const hi = Math.max(...c.items.map(it=>it.x+it.width));
-        spans.push({cell:c, lo, hi});
+  // Strict alignment: Use the first row with maxCells to establish the baseline columns
+  const baseRow = bufferCells.find(row => row.length === maxCells);
+  
+  const groups = baseRow.map(c => {
+     return {
+       lo: Math.min(...c.items.map(it=>it.x)),
+       hi: Math.max(...c.items.map(it=>it.x+it.width))
+     };
+  });
+
+  // Expand column boundaries using other rows with the same number of cells
+  // This explicitly prevents rows with fewer cells (colspans) from collapsing the grid
+  bufferCells.forEach(row => {
+    if(row.length === maxCells && row !== baseRow){
+      row.forEach((c, idx) => {
+         const lo = Math.min(...c.items.map(it=>it.x));
+         const hi = Math.max(...c.items.map(it=>it.x+it.width));
+         groups[idx].lo = Math.min(groups[idx].lo, lo);
+         groups[idx].hi = Math.max(groups[idx].hi, hi);
       });
     }
   });
-
-  // Fallback if filtering removed all rows
-  if(spans.length === 0){
-    bufferCells.forEach(row=>row.forEach(c=>{
-      const lo = Math.min(...c.items.map(it=>it.x));
-      const hi = Math.max(...c.items.map(it=>it.x+it.width));
-      spans.push({cell:c, lo, hi});
-    }));
-  }
-
-  spans.sort((a,b)=>a.lo-b.lo);
-  let groups = [];
-  spans.forEach(s => groups.push({lo: s.lo, hi: s.hi}));
   
-  // 3. Iteratively merge overlapping spans without infinitely expanding them
-  let changed = true;
-  while(changed){
-    changed = false;
-    groups.sort((a,b) => a.lo - b.lo);
-    const next = [];
-    for(let i=0; i<groups.length; i++){
-      if(next.length > 0){
-        let prev = next[next.length - 1];
-        if(groups[i].lo <= prev.hi){
-          prev.hi = Math.max(prev.hi, groups[i].hi);
-          prev.lo = Math.min(prev.lo, groups[i].lo);
-          changed = true;
-          continue;
-        }
-      }
-      next.push(groups[i]);
-    }
-    groups = next;
-  }
-
   const numCols = groups.length;
   const rows = bufferCells.map(row=>{
     const rowCells = groups.map(()=>({items:[]}));
     row.forEach(c=>{
       const lo = Math.min(...c.items.map(it=>it.x));
       const hi = Math.max(...c.items.map(it=>it.x+it.width));
-      // Assign cell to the column cluster with the best overlap
       let bestIdx=0, bestOverlap=-Infinity;
       groups.forEach((g,idx)=>{
+        // Calculate horizontal overlap against the fixed grid columns
         const ov = Math.min(hi,g.hi) - Math.max(lo,g.lo);
         if(ov>bestOverlap){bestOverlap=ov; bestIdx=idx;}
       });
