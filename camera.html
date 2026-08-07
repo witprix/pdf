@@ -67,7 +67,7 @@
     padding: 10px 12px; border-radius: 8px; font-size: 0.95rem; outline: none; margin-top: 8px;
   }
 
-  /* FULL SCREEN Camera live view - FIXED LAYOUT */
+  /* FULL SCREEN Camera live view */
   #cameraWrap {
     display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     background: #000; z-index: 9999; flex-direction: column;
@@ -114,12 +114,20 @@
   
   .edit-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
+  /* New Action Row for Preview */
+  .action-row { display: flex; gap: 12px; margin-top: 16px; width: 100%; }
+  
+  #retakeBtn {
+    flex: 1; background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px; font-weight: 700; font-size: 1.05rem;
+    cursor: pointer; transition: transform 0.1s;
+  }
   #runBtn {
-    width: 100%; margin-top: 12px; background: var(--accent); color: #0f1115;
-    border: none; border-radius: 14px; padding: 18px; font-weight: 800; font-size: 1.1rem;
+    flex: 2; background: var(--accent); color: #0f1115; border: none;
+    border-radius: 14px; padding: 18px; font-weight: 800; font-size: 1.1rem;
     cursor: pointer; box-shadow: 0 4px 15px rgba(110, 231, 183, 0.2); transition: transform 0.1s;
   }
-  #runBtn:active { transform: scale(0.98); }
+  #retakeBtn:active, #runBtn:active { transform: scale(0.98); }
   #runBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
   /* Status */
@@ -202,7 +210,7 @@
     <input type="file" id="fileInput" accept="image/*">
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
-    <!-- Fullscreen Camera Overlay with Fixed Grid -->
+    <!-- Fullscreen Camera Overlay -->
     <div id="cameraWrap">
       <video id="video" autoplay playsinline muted></video>
       <div class="camera-controls">
@@ -246,7 +254,10 @@
         </div>
       </details>
 
-      <button id="runBtn" type="button">✨ Extract Text</button>
+      <div class="action-row">
+        <button id="retakeBtn" type="button">✕ Retake</button>
+        <button id="runBtn" type="button">✨ Extract Text</button>
+      </div>
     </div>
 
     <!-- Processing Status -->
@@ -289,7 +300,7 @@ const previewWrap = document.getElementById('previewWrap'), previewCanvas = docu
 const ctx = previewCanvas.getContext('2d', { willReadFrequently: true });
 const rotateLeftBtn = document.getElementById('rotateLeftBtn'), rotateRightBtn = document.getElementById('rotateRightBtn');
 const contrastSlider = document.getElementById('contrastSlider'), brightnessSlider = document.getElementById('brightnessSlider'), bwFilterBtn = document.getElementById('bwFilterBtn');
-const modeToolbar = document.getElementById('modeToolbar'), runBtn = document.getElementById('runBtn');
+const modeToolbar = document.getElementById('modeToolbar'), runBtn = document.getElementById('runBtn'), retakeBtn = document.getElementById('retakeBtn');
 const status = document.getElementById('status'), statusText = document.getElementById('statusText'), progressBar = document.getElementById('progressBar');
 const resultWrap = document.getElementById('resultWrap'), output = document.getElementById('output'), confidenceEl = document.getElementById('confidence');
 const entities = document.getElementById('entities'), entityList = document.getElementById('entityList');
@@ -365,7 +376,6 @@ function renderPreview() {
   const swapped = rotation % 180 !== 0;
   const w = swapped ? baseImage.height : baseImage.width, h = swapped ? baseImage.width : baseImage.height;
   
-  // DOWNSCALED MAX DIMENSION to 1200px to prevent mobile browser memory crashes
   const scale = Math.min(1, 1200 / Math.max(w, h)); 
   previewCanvas.width = Math.round(w * scale); previewCanvas.height = Math.round(h * scale);
 
@@ -383,7 +393,6 @@ function applyImageAdjustments() {
   const contrast = parseFloat(contrastSlider.value); 
   const brightness = parseFloat(brightnessSlider.value); 
   
-  // PERFORMANCE FIX: Skip processing entirely if no filters are active
   if (contrast === 0 && brightness === 0 && !applyBwFilter) return;
 
   const imgData = ctx.getImageData(0, 0, previewCanvas.width, previewCanvas.height);
@@ -436,12 +445,12 @@ modeToolbar.addEventListener('click', (e) => {
   selectedMode = btn.dataset.mode;
 });
 
-// Helper to convert canvas to blob via Promise
 const getCanvasBlob = (canvas) => new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 
 // 4. Stable Text Extraction 
 runBtn.addEventListener('click', async () => {
   runBtn.disabled = true;
+  retakeBtn.disabled = true;
   adjustmentsDetails.open = false; 
   status.style.display = 'block'; resultWrap.style.display = 'none';
   statusText.textContent = 'Initializing AI...';
@@ -456,7 +465,6 @@ runBtn.addEventListener('click', async () => {
     
     if (!blob) throw new Error("Image processing failed.");
 
-    // Rewritten Tesseract API call to prevent silent freezing on mobile
     const worker = await Tesseract.createWorker(lang, 1, {
       logger: (m) => {
         if (m.status) statusText.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
@@ -487,6 +495,7 @@ runBtn.addEventListener('click', async () => {
     console.error(err);
   } finally {
     runBtn.disabled = false;
+    retakeBtn.disabled = false;
   }
 });
 
@@ -552,12 +561,17 @@ shareBtn.addEventListener('click', async () => {
   else { copyToClipboard(output.value); }
 });
 
-resetBtn.addEventListener('click', () => {
+// Reusable function to bring the app entirely back to the start state
+function resetAppToHome() {
   fileInput.value = ''; cameraInput.value = ''; baseImage = null;
   previewWrap.style.display = 'none'; resultWrap.style.display = 'none'; status.style.display = 'none'; output.value = '';
   inputSection.style.display = 'block'; 
   window.scrollTo({ top: 0, behavior: 'smooth' });
-});
+}
+
+// Bind reset to both Retake and Scan New Image buttons
+resetBtn.addEventListener('click', resetAppToHome);
+retakeBtn.addEventListener('click', resetAppToHome);
 
 async function copyToClipboard(text) {
   try {
