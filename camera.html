@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0f1115">
 <title>Enhanced Image to Text (OCR)</title>
+<!-- Using Tesseract v5 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
 <style>
   :root {
@@ -69,30 +70,13 @@
 
   /* FULL SCREEN Camera live view - TRUE MOBILE VIEWPORT FIX */
   #cameraWrap {
-    display: none; 
-    position: fixed; 
-    top: 0; left: 0; right: 0; bottom: 0; /* Pins to exact physical boundaries */
-    width: 100%; 
-    height: 100%;
-    height: 100dvh; /* Dynamic Viewport - ignores hidden browser bars */
-    background: #000; 
-    z-index: 9999; 
-    flex-direction: column;
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
+    width: 100%; height: 100%; height: 100dvh; background: #000; z-index: 9999; flex-direction: column;
   }
-  #video { 
-    flex: 1; 
-    width: 100%; 
-    height: 100%; 
-    min-height: 0; /* Prevents video from pushing buttons off screen */
-    object-fit: cover; 
-    background: #000; 
-  }
+  #video { flex: 1; width: 100%; height: 100%; min-height: 0; object-fit: cover; background: #000; }
   .camera-controls {
-    flex-shrink: 0; /* Locks controls in place */
-    display: flex; justify-content: space-evenly; align-items: center;
-    padding: 24px 10px calc(30px + var(--safe-b)) 10px; 
-    background: #0f1115; 
-    border-top: 1px solid #2a2e38;
+    flex-shrink: 0; display: flex; justify-content: space-evenly; align-items: center;
+    padding: 24px 10px calc(30px + var(--safe-b)) 10px; background: #0f1115; border-top: 1px solid #2a2e38;
   }
   .cam-btn-small {
     background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 50%;
@@ -150,7 +134,7 @@
   /* Status */
   #status { margin-top: 20px; font-size: 0.95rem; color: var(--accent); display: none; text-align: center; font-weight: 600; }
   #status.error-text { color: var(--danger); }
-  progress { width: 100%; height: 8px; margin-top: 10px; accent-color: var(--accent); border-radius: 8px; }
+  progress { width: 100%; height: 8px; margin-top: 10px; accent-color: var(--accent); border-radius: 8px; transition: width 0.2s; }
 
   /* Results */
   #resultWrap { margin-top: 24px; display: none; }
@@ -279,7 +263,7 @@
 
     <!-- Processing Status -->
     <div id="status">
-      <span id="statusText">Reading image…</span>
+      <span id="statusText">Starting Engine...</span>
       <progress id="progressBar" value="0" max="1"></progress>
     </div>
 
@@ -464,13 +448,13 @@ modeToolbar.addEventListener('click', (e) => {
 
 const getCanvasBlob = (canvas) => new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 
-// 4. Stable Text Extraction 
+// 4. Stable Text Extraction (Fixed Tesseract V5 Syntax)
 runBtn.addEventListener('click', async () => {
   runBtn.disabled = true;
   retakeBtn.disabled = true;
   adjustmentsDetails.open = false; 
   status.style.display = 'block'; resultWrap.style.display = 'none';
-  statusText.textContent = 'Initializing AI...';
+  statusText.textContent = 'Downloading AI Data (First run only)...';
   statusText.classList.remove('error-text');
   progressBar.value = 0;
   
@@ -482,16 +466,21 @@ runBtn.addEventListener('click', async () => {
     
     if (!blob) throw new Error("Image processing failed.");
 
-    const worker = await Tesseract.createWorker({
+    // EXCLUSIVE V5 SYNTAX - This prevents the silent promise hang
+    const worker = await Tesseract.createWorker(lang, 1, {
       logger: (m) => {
-        if (m.status) statusText.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
-        if (typeof m.progress === 'number') progressBar.value = m.progress;
+        if (m.status) {
+            statusText.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
+        }
+        if (typeof m.progress === 'number') {
+            progressBar.value = m.progress;
+        }
       }
     });
     
-    await worker.loadLanguage(lang);
-    await worker.initialize(lang);
-    await worker.setParameters({ tessedit_pageseg_mode: selectedMode });
+    await worker.setParameters({
+      tessedit_pageseg_mode: parseInt(selectedMode, 10)
+    });
     
     const { data: { text, confidence } } = await worker.recognize(blob);
     await worker.terminate();
@@ -580,7 +569,6 @@ shareBtn.addEventListener('click', async () => {
   else { copyToClipboard(output.value); }
 });
 
-// Reusable function to bring the app entirely back to the start state
 function resetAppToHome() {
   fileInput.value = ''; cameraInput.value = ''; baseImage = null;
   previewWrap.style.display = 'none'; resultWrap.style.display = 'none'; status.style.display = 'none'; output.value = '';
@@ -588,7 +576,6 @@ function resetAppToHome() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// Bind reset to both Retake and Scan New Image buttons
 resetBtn.addEventListener('click', resetAppToHome);
 retakeBtn.addEventListener('click', resetAppToHome);
 
