@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Image to Text (OCR)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel2: #1c2129;
+    --border: #2a2e38;
+    --accent: #6ee7b7;
+    --accent-dim: #3f9c78;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --danger: #f87171;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 14px 40px;
+    min-height: 100vh;
+  }
+  .container { width: 100%; max-width: 640px; }
+  h1 { font-size: 1.3rem; margin: 4px 0 2px; }
+  p.sub { color: var(--muted); margin: 0 0 20px; font-size: 0.88rem; line-height: 1.4; }
+
+  /* Upload zone */
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 14px;
+    padding: 26px 16px;
+    text-align: center;
+    background: var(--panel);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #dropzone.dragover { border-color: var(--accent); background: var(--panel2); }
+  #dropzone p { margin: 4px 0; color: var(--muted); font-size: 0.9rem; }
+  #dropzone p.main { color: var(--text); font-weight: 600; font-size: 0.98rem; }
+  #fileInput, #cameraInput { display: none; }
+
+  .row2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  button {
+    background: var(--accent);
+    color: #0f1115;
+    border: none;
+    border-radius: 10px;
+    padding: 13px 16px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.9rem;
+    min-height: 46px;
+  }
+  button:active { transform: scale(0.98); }
+  button.secondary {
+    background: var(--panel2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-weight: 600;
+  }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.full { width: 100%; }
+
+  /* Camera live view */
+  #cameraWrap { display: none; margin-top: 14px; }
+  #video {
+    width: 100%;
+    max-height: 60vh;
+    border-radius: 12px;
+    background: #000;
+    display: block;
+  }
+  .camera-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  /* Preview + editing */
+  #previewWrap { display: none; margin-top: 16px; }
+  #canvasHolder {
+    width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    border: 1px solid var(--border);
+  }
+  #previewCanvas { max-width: 100%; max-height: 50vh; display: block; }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .toolbar button {
+    flex: 1 1 auto;
+    padding: 10px 10px;
+    font-size: 0.82rem;
+    min-height: 40px;
+  }
+
+  .options {
+    margin-top: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .options summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text);
+  }
+  .opt-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    font-size: 0.86rem;
+    color: var(--muted);
+    gap: 10px;
+  }
+  .opt-row select {
+    background: var(--panel2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 8px;
+    font-size: 0.85rem;
+  }
+  .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; background: #333; border-radius: 24px; cursor: pointer; transition: 0.15s;
+  }
+  .slider::before {
+    content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px;
+    background: white; border-radius: 50%; transition: 0.15s;
+  }
+  input:checked + .slider { background: var(--accent-dim); }
+  input:checked + .slider::before { transform: translateX(18px); }
+
+  #runBtn { margin-top: 14px; }
+
+  /* Status */
+  #status { margin-top: 16px; display: none; }
+  #statusText { font-size: 0.88rem; color: var(--muted); }
+  progress {
+    width: 100%; height: 8px; margin-top: 8px; accent-color: var(--accent); border-radius: 4px; overflow: hidden;
+  }
+
+  /* Results */
+  #resultWrap { margin-top: 22px; display: none; }
+  #resultWrap h3 { margin: 0 0 8px; font-size: 1rem; }
+  .confidence { font-size: 0.78rem; color: var(--muted); margin-bottom: 10px; }
+  textarea {
+    width: 100%;
+    min-height: 170px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    resize: vertical;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  #contactsWrap { margin-top: 14px; display: none; }
+  #contactsWrap h4 { margin: 0 0 8px; font-size: 0.88rem; color: var(--muted); font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 0.82rem;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .actions.three { grid-template-columns: 1fr 1fr 1fr; }
+
+  footer {
+    margin-top: 26px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Image → Text</h1>
+    <p class="sub">Scan a photo, screenshot, or camera shot and get clean, editable text — entirely in your browser, nothing uploaded anywhere.</p>
+
+    <div id="dropzone">
+      <p class="main">Tap to choose an image</p>
+      <p>or drag & drop / paste one here</p>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <div class="row2">
+      <button id="cameraBtn" class="secondary" type="button">📷 Use Camera</button>
+      <button id="galleryBtn" class="secondary" type="button">🖼️ Choose Photo</button>
+    </div>
+    <input type="file" id="cameraInput" accept="image/*" capture="environment">
+
+    <!-- Live camera -->
+    <div id="cameraWrap">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="camera-actions">
+        <button id="captureBtn">Capture</button>
+        <button id="cancelCameraBtn" class="secondary">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Preview + edit before OCR -->
+    <div id="previewWrap">
+      <div id="canvasHolder"><canvas id="previewCanvas"></canvas></div>
+      <div class="toolbar">
+        <button id="rotateLeftBtn" class="secondary">⟲ Rotate</button>
+        <button id="rotateRightBtn" class="secondary">⟳ Rotate</button>
+        <button id="resetImgBtn" class="secondary">↺ Reset</button>
+        <button id="changeImgBtn" class="secondary">🔁 New image</button>
+      </div>
+
+      <details class="options" open>
+        <summary>Scan settings</summary>
+        <div class="opt-row">
+          <span>Enhance for OCR (contrast + sharpen)</span>
+          <label class="switch">
+            <input type="checkbox" id="enhanceToggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="opt-row">
+          <span>High-contrast black & white</span>
+          <label class="switch">
+            <input type="checkbox" id="bwToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="opt-row">
+          <span>Layout</span>
+          <select id="psmSelect">
+            <option value="3">Auto (default)</option>
+            <option value="6">Block of text</option>
+            <option value="11">Scattered / sign text</option>
+            <option value="7">Single line</option>
+          </select>
+        </div>
+        <div class="opt-row">
+          <span>Language</span>
+          <select id="langSelect">
+            <option value="eng">English</option>
+            <option value="eng+hin">English + Hindi</option>
+            <option value="eng+fra">English + French</option>
+            <option value="eng+spa">English + Spanish</option>
+            <option value="eng+deu">English + German</option>
+          </select>
+        </div>
+      </details>
+
+      <button id="runBtn" class="full">Extract text</button>
+    </div>
+
+    <div id="status">
+      <span id="statusText">Reading image…</span>
+      <progress id="progressBar" value="0" max="1"></progress>
+    </div>
+
+    <div id="resultWrap">
+      <h3>Extracted text</h3>
+      <div class="confidence" id="confidenceText"></div>
+      <textarea id="output" spellcheck="false"></textarea>
+
+      <div id="contactsWrap">
+        <h4>Detected</h4>
+        <div class="chips" id="chips"></div>
+      </div>
+
+      <div class="actions three">
+        <button id="copyBtn">📋 Copy</button>
+        <button id="shareBtn" class="secondary">📤 Share</button>
+        <button id="downloadBtn" class="secondary">⬇️ .txt</button>
+      </div>
+      <div class="actions">
+        <button id="rescanBtn" class="secondary full" style="grid-column: 1 / -1;">🔄 Adjust & rescan</button>
+      </div>
+      <button id="resetBtn" class="secondary full" style="margin-top:10px;">Start over</button>
+    </div>
+
+    <footer>Runs 100% on-device via Tesseract.js — your images never leave your phone.</footer>
+  </div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const cameraBtn = document.getElementById('cameraBtn');
+const galleryBtn = document.getElementById('galleryBtn');
+const cameraInput = document.getElementById('cameraInput');
+const cameraWrap = document.getElementById('cameraWrap');
+const video = document.getElementById('video');
+const captureBtn = document.getElementById('captureBtn');
+const cancelCameraBtn = document.getElementById('cancelCameraBtn');
+
+const previewWrap = document.getElementById('previewWrap');
+const previewCanvas = document.getElementById('previewCanvas');
+const ctx = previewCanvas.getContext('2d');
+const rotateLeftBtn = document.getElementById('rotateLeftBtn');
+const rotateRightBtn = document.getElementById('rotateRightBtn');
+const resetImgBtn = document.getElementById('resetImgBtn');
+const changeImgBtn = document.getElementById('changeImgBtn');
+const enhanceToggle = document.getElementById('enhanceToggle');
+const bwToggle = document.getElementById('bwToggle');
+const psmSelect = document.getElementById('psmSelect');
+const langSelect = document.getElementById('langSelect');
+const runBtn = document.getElementById('runBtn');
+
+const status = document.getElementById('status');
+const statusText = document.getElementById('statusText');
+const progressBar = document.getElementById('progressBar');
+
+const resultWrap = document.getElementById('resultWrap');
+const confidenceText = document.getElementById('confidenceText');
+const output = document.getElementById('output');
+const contactsWrap = document.getElementById('contactsWrap');
+const chips = document.getElementById('chips');
+const copyBtn = document.getElementById('copyBtn');
+const shareBtn = document.getElementById('shareBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const rescanBtn = document.getElementById('rescanBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+let currentStream = null;
+let baseImage = null;   // original loaded HTMLImageElement
+let rotation = 0;       // 0, 90, 180, 270
+
+// ---------- Entry points ----------
+dropzone.addEventListener('click', () => fileInput.click());
+galleryBtn.addEventListener('click', () => fileInput.click());
+
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+
+fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFile(fileInput.files[0]); });
+cameraInput.addEventListener('change', () => { if (cameraInput.files.length) loadFile(cameraInput.files[0]); });
+
+document.addEventListener('paste', (e) => {
+  const items = e.clipboardData.items;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) { loadFile(item.getAsFile()); break; }
+  }
+});
+
+// ---------- Camera (live) with fallback ----------
+cameraBtn.addEventListener('click', async () => {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    cameraInput.click();
+    return;
+  }
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    video.srcObject = currentStream;
+    cameraWrap.style.display = 'block';
+    previewWrap.style.display = 'none';
+    resultWrap.style.display = 'none';
+    dropzone.style.display = 'none';
+  } catch (err) {
+    cameraInput.click();
+  }
+});
+
+function stopCamera() {
+  if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+  cameraWrap.style.display = 'none';
+  dropzone.style.display = 'block';
+}
+cancelCameraBtn.addEventListener('click', stopCamera);
+
+captureBtn.addEventListener('click', () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  canvas.toBlob((blob) => {
+    stopCamera();
+    if (blob) loadFile(new File([blob], 'capture.jpg', { type: 'image/jpeg' }));
+  }, 'image/jpeg', 0.95);
+});
+
+// ---------- Load & prep image ----------
+function loadFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    baseImage = img;
+    rotation = 0;
+    dropzone.style.display = 'none';
+    resultWrap.style.display = 'none';
+    status.style.display = 'none';
+    previewWrap.style.display = 'block';
+    drawPreview();
+    previewWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  img.src = url;
+}
+
+function drawPreview() {
+  if (!baseImage) return;
+  const rad = (rotation * Math.PI) / 180;
+  const swap = rotation % 180 !== 0;
+  const w = baseImage.naturalWidth;
+  const h = baseImage.naturalHeight;
+  previewCanvas.width = swap ? h : w;
+  previewCanvas.height = swap ? w : h;
+  ctx.save();
+  ctx.translate(previewCanvas.width / 2, previewCanvas.height / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(baseImage, -w / 2, -h / 2, w, h);
+  ctx.restore();
+}
+
+rotateLeftBtn.addEventListener('click', () => { rotation = (rotation + 270) % 360; drawPreview(); });
+rotateRightBtn.addEventListener('click', () => { rotation = (rotation + 90) % 360; drawPreview(); });
+resetImgBtn.addEventListener('click', () => { rotation = 0; drawPreview(); });
+changeImgBtn.addEventListener('click', resetAll);
+
+// ---------- Build the processed canvas fed to OCR ----------
+function buildProcessedCanvas() {
+  const MAX_DIM = 2200;
+  const MIN_DIM = 1200;
+
+  const srcW = previewCanvas.width;
+  const srcH = previewCanvas.height;
+  let scale = 1;
+  const longest = Math.max(srcW, srcH);
+  if (longest > MAX_DIM) scale = MAX_DIM / longest;
+  else if (longest < MIN_DIM) scale = MIN_DIM / longest;
+
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = Math.round(srcW * scale);
+  outCanvas.height = Math.round(srcH * scale);
+  const octx = outCanvas.getContext('2d');
+  octx.imageSmoothingEnabled = true;
+  octx.imageSmoothingQuality = 'high';
+  octx.drawImage(previewCanvas, 0, 0, outCanvas.width, outCanvas.height);
+
+  if (enhanceToggle.checked || bwToggle.checked) {
+    const imgData = octx.getImageData(0, 0, outCanvas.width, outCanvas.height);
+    const d = imgData.data;
+
+    // Grayscale
+    const gray = new Uint8ClampedArray(d.length / 4);
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+      gray[j] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    }
+
+    if (bwToggle.checked) {
+      // Otsu's threshold for binarization
+      const hist = new Array(256).fill(0);
+      for (let j = 0; j < gray.length; j++) hist[gray[j]]++;
+      const total = gray.length;
+      let sum = 0;
+      for (let t = 0; t < 256; t++) sum += t * hist[t];
+      let sumB = 0, wB = 0, wF = 0, maxVar = 0, threshold = 127;
+      for (let t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (wB === 0) continue;
+        wF = total - wB;
+        if (wF === 0) break;
+        sumB += t * hist[t];
+        const mB = sumB / wB;
+        const mF = (sum - sumB) / wF;
+        const varBetween = wB * wF * (mB - mF) * (mB - mF);
+        if (varBetween > maxVar) { maxVar = varBetween; threshold = t; }
+      }
+      for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+        const v = gray[j] > threshold ? 255 : 0;
+        d[i] = d[i + 1] = d[i + 2] = v;
+      }
+    } else {
+      // Contrast boost around midpoint + mild gamma
+      const factor = 1.35;
+      for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+        let v = (gray[j] - 128) * factor + 128;
+        v = Math.max(0, Math.min(255, v));
+        d[i] = d[i + 1] = d[i + 2] = v;
+      }
+    }
+    octx.putImageData(imgData, 0, 0);
+  }
+
+  return outCanvas;
+}
+
+// ---------- Run OCR ----------
+runBtn.addEventListener('click', runOcr);
+rescanBtn.addEventListener('click', () => {
+  resultWrap.style.display = 'none';
+  previewWrap.style.display = 'block';
+  previewWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+async function runOcr() {
+  const processedCanvas = buildProcessedCanvas();
+
+  previewWrap.style.display = 'none';
+  resultWrap.style.display = 'none';
+  status.style.display = 'block';
+  statusText.textContent = 'Loading OCR engine…';
+  progressBar.value = 0;
+  runBtn.disabled = true;
+
+  try {
+    const lang = langSelect.value;
+    const psm = psmSelect.value;
+
+    const result = await Tesseract.recognize(processedCanvas, lang, {
+      logger: (m) => {
+        if (m.status) statusText.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
+        if (typeof m.progress === 'number') progressBar.value = m.progress;
+      },
+      tessedit_pageseg_mode: psm
+    });
+
+    const rawText = result.data.text || '';
+    const cleaned = cleanText(rawText);
+    output.value = cleaned || '(No text detected — try rescanning with different settings or a clearer photo.)';
+
+    const conf = Math.round(result.data.confidence || 0);
+    confidenceText.textContent = cleaned ? `Estimated accuracy: ~${conf}%` : '';
+
+    renderContacts(cleaned);
+
+    status.style.display = 'none';
+    resultWrap.style.display = 'block';
+    resultWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    statusText.textContent = 'Error: ' + err.message;
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+
+// Clean up common OCR noise: collapse blank lines, trim trailing spaces
+function cleanText(text) {
+  return text
+    .split('\n')
+    .map(line => line.replace(/[ \t]+/g, ' ').trim())
+    .filter((line, idx, arr) => !(line === '' && arr[idx - 1] === ''))
+    .join('\n')
+    .trim();
+}
+
+// ---------- Detect emails / phones / URLs ----------
+function renderContacts(text) {
+  const emailRe = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const urlRe = /\b((https?:\/\/)?(www\.)[^\s]+\.[a-z]{2,}[^\s]*)\b/gi;
+  const phoneRe = /(\+?\d[\d\s\-()]{6,}\d)/g;
+
+  const emails = [...new Set(text.match(emailRe) || [])];
+  const urls = [...new Set((text.match(urlRe) || []).filter(u => !emails.some(e => u.includes(e))))];
+  const phones = [...new Set(text.match(phoneRe) || [])].filter(p => p.replace(/\D/g, '').length >= 7);
+
+  chips.innerHTML = '';
+  emails.forEach(e => addChip('✉️ ' + e, `mailto:${e}`));
+  phones.forEach(p => addChip('📞 ' + p.trim(), `tel:${p.replace(/[\s()-]/g, '')}`));
+  urls.forEach(u => addChip('🔗 ' + u, u.startsWith('http') ? u : `https://${u}`));
+
+  contactsWrap.style.display = (emails.length || phones.length || urls.length) ? 'block' : 'none';
+}
+
+function addChip(label, href) {
+  const a = document.createElement('a');
+  a.className = 'chip';
+  a.textContent = label;
+  a.href = href;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  chips.appendChild(a);
+}
+
+// ---------- Result actions ----------
+copyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(output.value);
+    copyBtn.textContent = '✅ Copied!';
+    setTimeout(() => (copyBtn.textContent = '📋 Copy'), 1200);
+  } catch {
+    output.select();
+    document.execCommand('copy');
+  }
+});
+
+shareBtn.addEventListener('click', async () => {
+  if (navigator.share) {
+    try { await navigator.share({ text: output.value }); } catch {}
+  } else {
+    await navigator.clipboard.writeText(output.value);
+    shareBtn.textContent = '📋 Copied (no share on this browser)';
+    setTimeout(() => (shareBtn.textContent = '📤 Share'), 1800);
+  }
+});
+
+downloadBtn.addEventListener('click', () => {
+  const blob = new Blob([output.value], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'extracted-text.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+resetBtn.addEventListener('click', resetAll);
+
+function resetAll() {
+  fileInput.value = '';
+  cameraInput.value = '';
+  baseImage = null;
+  rotation = 0;
+  dropzone.style.display = 'block';
+  previewWrap.style.display = 'none';
+  resultWrap.style.display = 'none';
+  status.style.display = 'none';
+  output.value = '';
+  chips.innerHTML = '';
+  contactsWrap.style.display = 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
