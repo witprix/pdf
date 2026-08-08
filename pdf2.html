@@ -621,10 +621,20 @@
                 </div>
 
                 <div class="option-group">
-                    <label>3. Placement (Bottom Center by Default):</label>
+                    <label>3. Click on the document preview to pinpoint placement:</label>
+                    
+                    <!-- Visual Preview Area -->
+                    <div id="sig-preview-container" style="position: relative; overflow: auto; border: 1px solid var(--border-color); max-height: 600px; background: #eee; text-align: center; margin-bottom: 10px; border-radius: 4px;">
+                        <canvas id="sig-preview-canvas" style="box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: crosshair;"></canvas>
+                        
+                        <!-- Red visual marker representing the 200x80 signature box -->
+                        <div id="sig-marker" style="display: none; position: absolute; border: 2px dashed #ff6b6b; background: rgba(255, 107, 107, 0.2); pointer-events: none; transform: translate(-50%, -50%);"></div>
+                    </div>
+
+                    <!-- Hidden / Read-only X & Y Coordinates -->
                     <div style="display:flex; gap:10px;">
-                        <input type="number" id="sig-x" placeholder="X Offset (px)" value="150">
-                        <input type="number" id="sig-y" placeholder="Y Offset (px)" value="100">
+                        <input type="number" id="sig-x" placeholder="X Offset (px)" value="150" readonly title="Auto-calculated X">
+                        <input type="number" id="sig-y" placeholder="Y Offset (px)" value="100" readonly title="Auto-calculated Y">
                     </div>
                 </div>
 
@@ -1032,6 +1042,10 @@
         // MODULE: Signature Pad
         // ----------------------------------------------------
         let sigPdf = null;
+        let sigPdfJsDoc = null; 
+        let sigPreviewScale = 1;
+        const sigBoxWidth = 200; // Same as in stampSignature
+        const sigBoxHeight = 80;
         const canvas = document.getElementById('signature-canvas');
         const ctx = canvas.getContext('2d');
         let isDrawing = false;
@@ -1056,14 +1070,94 @@
         async function handleSigFile(event) {
             const file = event.target.files[0];
             if (!file) return;
-            sigPdf = await PDFLib.PDFDocument.load(await file.arrayBuffer());
+            
+            const buffer = await file.arrayBuffer();
+            
+            // Load with pdf-lib for final stamping
+            sigPdf = await PDFLib.PDFDocument.load(buffer);
+            
+            // Load with pdf.js for the visual preview
+            sigPdfJsDoc = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise;
+
             const select = document.getElementById('sig-page-select');
             select.innerHTML = '';
-            for (let i = 0; i < sigPdf.getPageCount(); i++) select.innerHTML += `<option value="${i}">Page ${i+1}</option>`;
+            for (let i = 0; i < sigPdf.getPageCount(); i++) {
+                select.innerHTML += `<option value="${i}">Page ${i+1}</option>`;
+            }
+            
+            // Listen for page changes to re-render the preview
+            select.addEventListener('change', renderSigPreview);
+
             document.getElementById('sig-upload-area').style.display = 'none';
             document.getElementById('sig-editor').style.display = 'block';
+            
             clearSignature();
+            
+            // Render the initial page preview
+            renderSigPreview();
         }
+        
+        async function renderSigPreview() {
+            if (!sigPdfJsDoc) return;
+            
+            const select = document.getElementById('sig-page-select');
+            const pageIndex = parseInt(select.value) + 1; // pdf.js is 1-indexed
+            
+            const page = await sigPdfJsDoc.getPage(pageIndex);
+            const previewCanvas = document.getElementById('sig-preview-canvas');
+            const previewCtx = previewCanvas.getContext('2d');
+            const container = document.getElementById('sig-preview-container');
+            
+            // Calculate a scale to fit the preview inside the container width
+            const unscaledViewport = page.getViewport({ scale: 1 });
+            // Keep a little padding (40px) for scrollbars
+            sigPreviewScale = Math.min(1.5, (container.clientWidth - 40) / unscaledViewport.width); 
+            
+            const viewport = page.getViewport({ scale: sigPreviewScale });
+            
+            previewCanvas.width = viewport.width;
+            previewCanvas.height = viewport.height;
+            
+            // Hide the marker on new page load
+            document.getElementById('sig-marker').style.display = 'none';
+            
+            await page.render({ canvasContext: previewCtx, viewport: viewport }).promise;
+        }
+
+        // Click listener to set X and Y based on user interaction
+        document.getElementById('sig-preview-canvas').addEventListener('click', function(e) {
+            const rect = this.getBoundingClientRect();
+            
+            // Click coordinates relative to the canvas
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            
+            // Show and position the visual marker
+            const marker = document.getElementById('sig-marker');
+            marker.style.display = 'block';
+            marker.style.left = clickX + 'px';
+            marker.style.top = clickY + 'px';
+            
+            // Scale the marker based on current PDF zoom
+            marker.style.width = (sigBoxWidth * sigPreviewScale) + 'px';
+            marker.style.height = (sigBoxHeight * sigPreviewScale) + 'px';
+            
+            // Translate to raw PDF Coordinates
+            // 1. Account for the rendering scale
+            const rawPdfX = clickX / sigPreviewScale;
+            const rawPdfY = clickY / sigPreviewScale;
+            
+            // 2. Flip the Y axis (HTML canvas is Top-to-Bottom, PDF-lib is Bottom-to-Top)
+            const truePdfY = (this.height / sigPreviewScale) - rawPdfY;
+            
+            // 3. Center the signature box by offsetting half its width and height
+            const finalX = Math.round(rawPdfX - (sigBoxWidth / 2));
+            const finalY = Math.round(truePdfY - (sigBoxHeight / 2));
+            
+            // Update the inputs that stampSignature() will read
+            document.getElementById('sig-x').value = finalX;
+            document.getElementById('sig-y').value = finalY;
+        });
 
         async function stampSignature() {
             if (!sigPdf) return;
@@ -1085,9 +1179,11 @@
 
         function clearSigFile() {
             sigPdf = null;
+            sigPdfJsDoc = null;
             document.getElementById('sig-file').value = '';
             document.getElementById('sig-upload-area').style.display = 'block';
             document.getElementById('sig-editor').style.display = 'none';
+            document.getElementById('sig-marker').style.display = 'none';
         }
 
         // ----------------------------------------------------
