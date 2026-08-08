@@ -402,9 +402,28 @@ cameraBtn.addEventListener('click', async () => {
   }
   try {
     currentStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+      video: { 
+        facingMode: { ideal: 'environment' }, 
+        width: { ideal: 1920 }, 
+        height: { ideal: 1080 },
+        advanced: [{ focusMode: "continuous" }] 
+      }
     });
     video.srcObject = currentStream;
+
+    // Apply continuous auto-focus if device capabilities support it
+    try {
+      const track = currentStream.getVideoTracks()[0];
+      if (track && track.getCapabilities) {
+        const capabilities = track.getCapabilities();
+        if (capabilities.focusMode && capabilities.focusMode.includes("continuous")) {
+          await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+        }
+      }
+    } catch (e) {
+      // Silently ignore constraint errors on unsupported devices
+    }
+
     cameraWrap.style.display = 'block';
     previewWrap.style.display = 'none';
     resultWrap.style.display = 'none';
