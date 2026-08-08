@@ -456,19 +456,16 @@
         </div>
 
         <div class="tabs">
-            <!-- Organization -->
             <button class="tab-btn active" onclick="switchTab('merge')">Merge</button>
             <button class="tab-btn" onclick="switchTab('split')">Split</button>
             <button class="tab-btn" onclick="switchTab('extract')">Extract Pages</button>
             <button class="tab-btn" onclick="switchTab('delete')">Delete Pages</button>
             <button class="tab-btn" onclick="switchTab('reorder')">Reorder</button>
-            <!-- Content Editing -->
             <button class="tab-btn" onclick="switchTab('editfields')">Form & Fields</button>
             <button class="tab-btn" onclick="switchTab('signature')">Sign PDF</button>
             <button class="tab-btn" onclick="switchTab('addtext')">Add Text</button>
             <button class="tab-btn" onclick="switchTab('watermark')">Watermark</button>
             <button class="tab-btn" onclick="switchTab('metadata')">Metadata</button>
-            <!-- Conversion & Utilities -->
             <button class="tab-btn" onclick="switchTab('convert')">Images to PDF</button>
             <button class="tab-btn" onclick="switchTab('extractimages')">Export ZIP</button>
             <button class="tab-btn" onclick="switchTab('text-extract')">Extract Text</button>
@@ -478,7 +475,6 @@
             <button class="tab-btn" onclick="switchTab('p2p-share')">Wi-Fi Share</button>
         </div>
 
-        <!-- Tabs 1 through 6 kept unchanged -->
         <div id="merge" class="tab-content active">
             <h2>Merge Multiple PDFs</h2>
             <div class="upload-area" onclick="document.getElementById('merge-files').click()">
@@ -604,7 +600,7 @@
             <div class="status" id="editfields-status"></div>
         </div>
 
-        <!-- 7. Touch-Optimized Signature Pad & Visual Placement -->
+        <!-- 7. Signature Pad -->
         <div id="signature" class="tab-content">
             <h2>Sign PDF Document</h2>
             <p style="margin: 15px 0; color: var(--text-muted);">Draw your signature and stamp it precisely onto a specific page.</p>
@@ -622,7 +618,18 @@
                 </div>
 
                 <div class="option-group">
-                    <label>2. Draw Your Signature:</label>
+                    <label>2. Draw or Type Your Signature:</label>
+                    
+                    <!-- NEW: Typing support -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <input type="text" id="sig-type-input" placeholder="Type your name here..." oninput="typeSignature()" style="flex: 1;">
+                        <select id="sig-font" onchange="typeSignature()" style="width: auto;">
+                            <option value="cursive">Cursive</option>
+                            <option value="serif">Serif</option>
+                            <option value="monospace">Monospace</option>
+                        </select>
+                    </div>
+
                     <canvas id="signature-canvas" width="500" height="200"></canvas>
                     <div style="text-align:center; margin-top:10px;">
                         <button class="btn btn-secondary" onclick="clearSignature()">Clear Pad</button>
@@ -632,20 +639,14 @@
                 <div class="option-group">
                     <label>3. Click to place, then drag the bottom-right corner to resize:</label>
                     
-                    <!-- Visual Preview Area -->
                     <div id="sig-preview-container" style="position: relative; overflow: auto; border: 1px solid var(--border-color); max-height: 600px; background: #eee; text-align: center; margin-bottom: 10px; border-radius: 4px;">
                         <canvas id="sig-preview-canvas" style="box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: crosshair; touch-action: none;"></canvas>
                         
-                        <!-- Red visual marker representing the signature box -->
                         <div id="sig-marker" style="display: none; position: absolute; border: 2px dashed #ff6b6b; background: rgba(255, 107, 107, 0.2); pointer-events: none;">
-                            
-                            <!-- Draggable Resize Handle -->
                             <div id="sig-resize-handle" style="position: absolute; right: -8px; bottom: -8px; width: 16px; height: 16px; background: #667eea; border-radius: 50%; cursor: nwse-resize; box-shadow: 0 1px 3px rgba(0,0,0,0.3); pointer-events: auto;"></div>
-                            
                         </div>
                     </div>
 
-                    <!-- Hidden / Read-only Coordinate Tracking -->
                     <div class="sig-input-grid">
                         <div>
                             <label>X Pos (px)</label>
@@ -666,13 +667,11 @@
                     </div>
                 </div>
 
-                <!-- Step 1: Preview Buttons -->
                 <div class="action-buttons" id="sig-action-group-1">
                     <button class="btn btn-primary" onclick="previewStamp()">Preview Stamp</button>
                     <button class="btn btn-secondary" onclick="clearSigFile()">Start Over</button>
                 </div>
                 
-                <!-- Step 2: Download or Retry Buttons -->
                 <div class="action-buttons" id="sig-action-group-2" style="display:none;">
                     <button class="btn btn-primary" onclick="downloadStampedPDF()" style="background:#28a745;">Download Signed PDF</button>
                     <button class="btn btn-secondary" onclick="retryStamp()">Undo Stamp</button>
@@ -682,7 +681,6 @@
             <div class="status" id="sig-status"></div>
         </div>
 
-        <!-- Remaining Tabs Unchanged -->
         <div id="addtext" class="tab-content">
             <h2>Add Text to PDF</h2>
             <div class="upload-area" onclick="document.getElementById('addtext-file').click()">
@@ -1085,11 +1083,50 @@
         canvas.addEventListener('touchend', (e) => { e.preventDefault(); isDrawing = false; });
 
         function draw(x, y, isDown) {
-            if (!isDown) { ctx.beginPath(); ctx.moveTo(x, y); }
-            else { ctx.lineTo(x, y); ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.stroke(); }
+            // If they start drawing manually, clear the typing input so there is no confusion
+            if (!isDown) { 
+                document.getElementById('sig-type-input').value = ''; 
+                ctx.beginPath(); 
+                ctx.moveTo(x, y); 
+            }
+            else { 
+                ctx.lineTo(x, y); 
+                ctx.strokeStyle = '#000'; 
+                ctx.lineWidth = 3; 
+                ctx.stroke(); 
+            }
         }
 
-        function clearSignature() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+        function clearSignature() { 
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Also clear the typed text input field
+            const typeInput = document.getElementById('sig-type-input');
+            if (typeInput) typeInput.value = '';
+        }
+
+        // NEW: Render typed text directly onto the drawing canvas
+        function typeSignature() {
+            const text = document.getElementById('sig-type-input').value;
+            const font = document.getElementById('sig-font').value;
+            
+            // Clear any existing drawing first
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (text) {
+                // Pick font string based on selection
+                let fontStr = '48px "Brush Script MT", "Comic Sans MS", cursive';
+                if (font === 'serif') fontStr = '48px "Times New Roman", Times, serif';
+                else if (font === 'monospace') fontStr = '48px "Courier New", Courier, monospace';
+                
+                ctx.font = fontStr;
+                ctx.fillStyle = '#000';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Draw the text exactly in the center of the canvas
+                ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            }
+        }
 
         async function handleSigFile(event) {
             const file = event.target.files[0];
@@ -1266,7 +1303,7 @@
             const w = parseFloat(marker.style.width);
             const h = parseFloat(marker.style.height);
 
-            // Draw the user's drawn signature onto the preview canvas
+            // Draw the user's signature (whether typed or drawn) onto the preview canvas
             previewCtx.drawImage(sigCanvas, x, y, w, h);
 
             // Hide the marker and toggle to Step 2 buttons
@@ -1283,7 +1320,7 @@
             renderSigPreview().then(() => {
                 // Show the red marker box again where they left it
                 document.getElementById('sig-marker').style.display = 'block';
-                showStatus('sig-status', 'Stamp erased. You can move the box or redraw your signature.', 'info');
+                showStatus('sig-status', 'Stamp erased. You can move the box or redraw/retype your signature.', 'info');
             });
         }
 
@@ -1328,6 +1365,8 @@
             document.getElementById('sig-upload-area').style.display = 'block';
             document.getElementById('sig-editor').style.display = 'none';
             document.getElementById('sig-marker').style.display = 'none';
+            
+            document.getElementById('sig-type-input').value = ''; 
             
             // Reset button visibility
             document.getElementById('sig-action-group-1').style.display = 'flex';
