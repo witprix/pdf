@@ -384,12 +384,25 @@
             border-radius: 8px;
             background: #fff;
             cursor: crosshair;
-            touch-action: none; /* Prevents scrolling while signing on mobile */
+            touch-action: none;
             width: 100%;
             max-width: 500px;
             height: 200px;
             display: block;
             margin: 0 auto;
+        }
+        
+        .sig-input-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .sig-input-grid label {
+            font-size: 0.85em;
+            margin-bottom: 2px;
+            color: var(--text-muted);
         }
 
         /* QR Code Container */
@@ -421,6 +434,7 @@
             .page-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
             .action-buttons { flex-direction: column; }
             .btn { width: 100%; }
+            .sig-input-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -464,7 +478,7 @@
             <button class="tab-btn" onclick="switchTab('p2p-share')">Wi-Fi Share</button>
         </div>
 
-        <!-- 1. Merge Tab -->
+        <!-- Tabs 1 through 6 kept unchanged -->
         <div id="merge" class="tab-content active">
             <h2>Merge Multiple PDFs</h2>
             <div class="upload-area" onclick="document.getElementById('merge-files').click()">
@@ -481,7 +495,6 @@
             <div class="status" id="merge-status"></div>
         </div>
 
-        <!-- 2. Split Tab -->
         <div id="split" class="tab-content">
             <h2>Split PDF</h2>
             <div class="upload-area" onclick="document.getElementById('split-file').click()">
@@ -511,7 +524,6 @@
             <div class="status" id="split-status"></div>
         </div>
 
-        <!-- 3. Extract Tab -->
         <div id="extract" class="tab-content">
             <h2>Extract Specific Pages</h2>
             <div class="upload-area" onclick="document.getElementById('extract-file').click()">
@@ -527,7 +539,6 @@
             <div class="status" id="extract-status"></div>
         </div>
 
-        <!-- 4. Delete Tab -->
         <div id="delete" class="tab-content">
             <h2>Delete Pages</h2>
             <div class="upload-area" onclick="document.getElementById('delete-file').click()">
@@ -543,7 +554,6 @@
             <div class="status" id="delete-status"></div>
         </div>
 
-        <!-- 5. Reorder Tab -->
         <div id="reorder" class="tab-content">
             <h2>Reorder Pages</h2>
             <div class="upload-area" onclick="document.getElementById('reorder-file').click()">
@@ -564,7 +574,6 @@
             <div class="status" id="reorder-status"></div>
         </div>
 
-        <!-- 6. Form Edit & Data Export/Import -->
         <div id="editfields" class="tab-content">
             <h2>Form Editor & Data Sync</h2>
             <p style="margin: 15px 0; color: var(--text-muted);">Fill in forms visually, or Export/Import your frequent inputs to save time.</p>
@@ -595,10 +604,10 @@
             <div class="status" id="editfields-status"></div>
         </div>
 
-        <!-- 7. Touch-Optimized Signature Pad -->
+        <!-- 7. Touch-Optimized Signature Pad & Visual Placement -->
         <div id="signature" class="tab-content">
             <h2>Sign PDF Document</h2>
-            <p style="margin: 15px 0; color: var(--text-muted);">Draw your signature and stamp it onto a specific page.</p>
+            <p style="margin: 15px 0; color: var(--text-muted);">Draw your signature and stamp it precisely onto a specific page.</p>
             
             <div class="upload-area" id="sig-upload-area" onclick="document.getElementById('sig-file').click()">
                 <div class="upload-icon">✍️</div>
@@ -621,20 +630,39 @@
                 </div>
 
                 <div class="option-group">
-                    <label>3. Click on the document preview to pinpoint placement:</label>
+                    <label>3. Click to place, then drag the bottom-right corner to resize:</label>
                     
                     <!-- Visual Preview Area -->
                     <div id="sig-preview-container" style="position: relative; overflow: auto; border: 1px solid var(--border-color); max-height: 600px; background: #eee; text-align: center; margin-bottom: 10px; border-radius: 4px;">
-                        <canvas id="sig-preview-canvas" style="box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: crosshair;"></canvas>
+                        <canvas id="sig-preview-canvas" style="box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: crosshair; touch-action: none;"></canvas>
                         
-                        <!-- Red visual marker representing the 200x80 signature box -->
-                        <div id="sig-marker" style="display: none; position: absolute; border: 2px dashed #ff6b6b; background: rgba(255, 107, 107, 0.2); pointer-events: none; transform: translate(-50%, -50%);"></div>
+                        <!-- Red visual marker representing the signature box -->
+                        <div id="sig-marker" style="display: none; position: absolute; border: 2px dashed #ff6b6b; background: rgba(255, 107, 107, 0.2); pointer-events: none;">
+                            
+                            <!-- Draggable Resize Handle -->
+                            <div id="sig-resize-handle" style="position: absolute; right: -8px; bottom: -8px; width: 16px; height: 16px; background: #667eea; border-radius: 50%; cursor: nwse-resize; box-shadow: 0 1px 3px rgba(0,0,0,0.3); pointer-events: auto;"></div>
+                            
+                        </div>
                     </div>
 
-                    <!-- Hidden / Read-only X & Y Coordinates -->
-                    <div style="display:flex; gap:10px;">
-                        <input type="number" id="sig-x" placeholder="X Offset (px)" value="150" readonly title="Auto-calculated X">
-                        <input type="number" id="sig-y" placeholder="Y Offset (px)" value="100" readonly title="Auto-calculated Y">
+                    <!-- Hidden / Read-only Coordinate Tracking -->
+                    <div class="sig-input-grid">
+                        <div>
+                            <label>X Pos (px)</label>
+                            <input type="number" id="sig-x" value="150" readonly>
+                        </div>
+                        <div>
+                            <label>Y Pos (px)</label>
+                            <input type="number" id="sig-y" value="100" readonly>
+                        </div>
+                        <div>
+                            <label>Width (px)</label>
+                            <input type="number" id="sig-w" value="200" readonly>
+                        </div>
+                        <div>
+                            <label>Height (px)</label>
+                            <input type="number" id="sig-h" value="80" readonly>
+                        </div>
                     </div>
                 </div>
 
@@ -646,7 +674,7 @@
             <div class="status" id="sig-status"></div>
         </div>
 
-        <!-- 8. Add Text Tab -->
+        <!-- Remaining Tabs Unchanged -->
         <div id="addtext" class="tab-content">
             <h2>Add Text to PDF</h2>
             <div class="upload-area" onclick="document.getElementById('addtext-file').click()">
@@ -674,7 +702,6 @@
             <div class="status" id="addtext-status"></div>
         </div>
 
-        <!-- 9. Watermark Tab -->
         <div id="watermark" class="tab-content">
             <h2>Watermark & Page Numbers</h2>
             <div class="upload-area" onclick="document.getElementById('wm-file').click()">
@@ -695,7 +722,6 @@
             <div class="status" id="wm-status"></div>
         </div>
 
-        <!-- 10. Metadata Tab -->
         <div id="metadata" class="tab-content">
             <h2>Edit PDF Metadata</h2>
             <div class="upload-area" onclick="document.getElementById('meta-file').click()">
@@ -715,7 +741,6 @@
             <div class="status" id="meta-status"></div>
         </div>
 
-        <!-- 11. Images to PDF Tab -->
         <div id="convert" class="tab-content">
             <h2>Images to PDF</h2>
             <div class="upload-area" onclick="document.getElementById('img-file').click()">
@@ -731,7 +756,6 @@
             <div class="status" id="convert-status"></div>
         </div>
 
-        <!-- 12. Batch Export Images (JSZip) -->
         <div id="extractimages" class="tab-content">
             <h2>Export Pages as Images (ZIP)</h2>
             <p style="margin: 15px 0; color: var(--text-muted);">Convert every page of a PDF into JPGs and download as a single ZIP file.</p>
@@ -748,7 +772,6 @@
             <div class="status" id="zip-status"></div>
         </div>
 
-        <!-- 13. Raw Text Extraction -->
         <div id="text-extract" class="tab-content">
             <h2>Extract Raw Text</h2>
             <p style="margin: 15px 0; color: var(--text-muted);">Extract selectable text layers into a raw format.</p>
@@ -767,7 +790,6 @@
             <div class="status" id="txt-status"></div>
         </div>
 
-        <!-- 14. Rotate Tab -->
         <div id="rotate" class="tab-content">
             <h2>Rotate Pages</h2>
             <div class="upload-area" onclick="document.getElementById('rotate-file').click()">
@@ -787,7 +809,6 @@
             <div class="status" id="rotate-status"></div>
         </div>
 
-        <!-- 15. Compress Tab -->
         <div id="compress" class="tab-content">
             <h2>Compress PDF</h2>
             <div class="upload-area" onclick="document.getElementById('compress-file').click()">
@@ -807,7 +828,6 @@
             <div class="status" id="compress-status"></div>
         </div>
 
-        <!-- 16. Remove Password Tab -->
         <div id="removepw" class="tab-content">
             <h2>Remove Password</h2>
             <div class="upload-area" onclick="document.getElementById('removepw-file').click()">
@@ -827,13 +847,11 @@
             <div class="status" id="removepw-status"></div>
         </div>
 
-        <!-- 17. Peer-to-Peer Wi-Fi Share -->
         <div id="p2p-share" class="tab-content">
             <h2>Wi-Fi File Transfer</h2>
             <p style="margin: 15px 0; color: var(--text-muted);">Send a local file to a nearby device seamlessly without cloud storage.</p>
             
             <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:20px;">
-                <!-- Sender Section -->
                 <div style="flex:1; min-width:300px; background:var(--upload-bg); padding:20px; border-radius:10px; border:1px solid var(--border-color);">
                     <h3 style="margin-bottom:15px; color:#667eea;">📤 Send a File</h3>
                     <button class="btn btn-secondary" id="p2p-init-btn" onclick="initP2PSender()" style="width:100%; margin-bottom:15px;">Generate QR Code Link</button>
@@ -852,11 +870,9 @@
             </div>
             <div class="status" id="p2p-status"></div>
         </div>
-
     </div>
 
     <script>
-        // Set up PDF.js worker globally
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
         // ----------------------------------------------------
@@ -893,7 +909,6 @@
             window.URL.revokeObjectURL(url);
         }
 
-        // Shared dragging fix
         document.addEventListener('dragover', (e) => { e.preventDefault(); if(e.target.closest('.upload-area')) e.target.closest('.upload-area').classList.add('dragover'); });
         document.addEventListener('dragleave', (e) => { if(e.target.closest('.upload-area')) e.target.closest('.upload-area').classList.remove('dragover'); });
         document.addEventListener('drop', (e) => {
@@ -945,7 +960,7 @@
         }
 
         // ----------------------------------------------------
-        // MODULE: Edit Fields & Form Import/Export JSON
+        // MODULE: Edit Fields & Form Import/Export
         // ----------------------------------------------------
         let editFieldsPDF = null;
         let formFields = [];
@@ -1039,23 +1054,25 @@
         }
 
         // ----------------------------------------------------
-        // MODULE: Signature Pad
+        // MODULE: Signature Pad & Dynamic Visual Placement
         // ----------------------------------------------------
         let sigPdf = null;
         let sigPdfJsDoc = null; 
         let sigPreviewScale = 1;
-        const sigBoxWidth = 200; // Same as in stampSignature
-        const sigBoxHeight = 80;
+        
+        // Dynamic variables to hold raw PDF dimension targets
+        let currentSigWidth = 200; 
+        let currentSigHeight = 80; 
+        
         const canvas = document.getElementById('signature-canvas');
         const ctx = canvas.getContext('2d');
         let isDrawing = false;
 
-        // Mouse Events
+        // Drawing Event Listeners
         canvas.addEventListener('mousedown', (e) => { isDrawing = true; draw(e.offsetX, e.offsetY, false); });
         canvas.addEventListener('mousemove', (e) => { if (isDrawing) draw(e.offsetX, e.offsetY, true); });
         canvas.addEventListener('mouseup', () => isDrawing = false);
         canvas.addEventListener('mouseout', () => isDrawing = false);
-        // Touch Events (Mobile Support)
         canvas.addEventListener('touchstart', (e) => { e.preventDefault(); const touch = e.touches[0]; const rect = canvas.getBoundingClientRect(); isDrawing = true; draw(touch.clientX - rect.left, touch.clientY - rect.top, false); });
         canvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (!isDrawing) return; const touch = e.touches[0]; const rect = canvas.getBoundingClientRect(); draw(touch.clientX - rect.left, touch.clientY - rect.top, true); });
         canvas.addEventListener('touchend', (e) => { e.preventDefault(); isDrawing = false; });
@@ -1072,11 +1089,7 @@
             if (!file) return;
             
             const buffer = await file.arrayBuffer();
-            
-            // Load with pdf-lib for final stamping
             sigPdf = await PDFLib.PDFDocument.load(buffer);
-            
-            // Load with pdf.js for the visual preview
             sigPdfJsDoc = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise;
 
             const select = document.getElementById('sig-page-select');
@@ -1085,15 +1098,12 @@
                 select.innerHTML += `<option value="${i}">Page ${i+1}</option>`;
             }
             
-            // Listen for page changes to re-render the preview
             select.addEventListener('change', renderSigPreview);
 
             document.getElementById('sig-upload-area').style.display = 'none';
             document.getElementById('sig-editor').style.display = 'block';
             
             clearSignature();
-            
-            // Render the initial page preview
             renderSigPreview();
         }
         
@@ -1101,16 +1111,14 @@
             if (!sigPdfJsDoc) return;
             
             const select = document.getElementById('sig-page-select');
-            const pageIndex = parseInt(select.value) + 1; // pdf.js is 1-indexed
+            const pageIndex = parseInt(select.value) + 1;
             
             const page = await sigPdfJsDoc.getPage(pageIndex);
             const previewCanvas = document.getElementById('sig-preview-canvas');
             const previewCtx = previewCanvas.getContext('2d');
             const container = document.getElementById('sig-preview-container');
             
-            // Calculate a scale to fit the preview inside the container width
             const unscaledViewport = page.getViewport({ scale: 1 });
-            // Keep a little padding (40px) for scrollbars
             sigPreviewScale = Math.min(1.5, (container.clientWidth - 40) / unscaledViewport.width); 
             
             const viewport = page.getViewport({ scale: sigPreviewScale });
@@ -1118,61 +1126,140 @@
             previewCanvas.width = viewport.width;
             previewCanvas.height = viewport.height;
             
-            // Hide the marker on new page load
             document.getElementById('sig-marker').style.display = 'none';
             
             await page.render({ canvasContext: previewCtx, viewport: viewport }).promise;
         }
 
-        // Click listener to set X and Y based on user interaction
+        // 1. Move Marker by Clicking Canvas
         document.getElementById('sig-preview-canvas').addEventListener('click', function(e) {
             const rect = this.getBoundingClientRect();
-            
-            // Click coordinates relative to the canvas
             const clickX = e.clientX - rect.left;
             const clickY = e.clientY - rect.top;
             
-            // Show and position the visual marker
             const marker = document.getElementById('sig-marker');
             marker.style.display = 'block';
-            marker.style.left = clickX + 'px';
-            marker.style.top = clickY + 'px';
             
-            // Scale the marker based on current PDF zoom
-            marker.style.width = (sigBoxWidth * sigPreviewScale) + 'px';
-            marker.style.height = (sigBoxHeight * sigPreviewScale) + 'px';
+            // Apply current scale to dimensions
+            const scaledW = currentSigWidth * sigPreviewScale;
+            const scaledH = currentSigHeight * sigPreviewScale;
             
-            // Translate to raw PDF Coordinates
-            // 1. Account for the rendering scale
-            const rawPdfX = clickX / sigPreviewScale;
-            const rawPdfY = clickY / sigPreviewScale;
+            marker.style.width = scaledW + 'px';
+            marker.style.height = scaledH + 'px';
             
-            // 2. Flip the Y axis (HTML canvas is Top-to-Bottom, PDF-lib is Bottom-to-Top)
-            const truePdfY = (this.height / sigPreviewScale) - rawPdfY;
+            // Center the marker horizontally and vertically on the click coordinates
+            marker.style.left = (clickX - (scaledW / 2)) + 'px';
+            marker.style.top = (clickY - (scaledH / 2)) + 'px';
             
-            // 3. Center the signature box by offsetting half its width and height
-            const finalX = Math.round(rawPdfX - (sigBoxWidth / 2));
-            const finalY = Math.round(truePdfY - (sigBoxHeight / 2));
+            updateSigCoordinates();
+        });
+
+        // 2. Core math to translate DOM pixels to raw PDF-lib coordinates
+        function updateSigCoordinates() {
+            const marker = document.getElementById('sig-marker');
+            const canvas = document.getElementById('sig-preview-canvas');
             
-            // Update the inputs that stampSignature() will read
+            const markerLeft = parseFloat(marker.style.left);
+            const markerTop = parseFloat(marker.style.top);
+            const markerWidth = parseFloat(marker.style.width);
+            const markerHeight = parseFloat(marker.style.height);
+            
+            // De-scale coordinates back to pure PDF points
+            const rawPdfX = markerLeft / sigPreviewScale;
+            const rawPdfY = markerTop / sigPreviewScale;
+            
+            currentSigWidth = Math.round(markerWidth / sigPreviewScale);
+            currentSigHeight = Math.round(markerHeight / sigPreviewScale);
+            
+            // PDF-lib's Y-axis starts from the BOTTOM, whereas HTML canvas starts from TOP.
+            // We must flip the calculation using the full height of the de-scaled PDF page.
+            const pdfCanvasHeight = canvas.height / sigPreviewScale;
+            const finalY = Math.round(pdfCanvasHeight - rawPdfY - currentSigHeight);
+            const finalX = Math.round(rawPdfX);
+            
+            // Update UI
             document.getElementById('sig-x').value = finalX;
             document.getElementById('sig-y').value = finalY;
-        });
+            document.getElementById('sig-w').value = currentSigWidth;
+            document.getElementById('sig-h').value = currentSigHeight;
+        }
+
+        // 3. Resizing logic triggered by the bottom right knob
+        const handle = document.getElementById('sig-resize-handle');
+        const marker = document.getElementById('sig-marker');
+        let isResizingSig = false;
+        let initialResX, initialResY, initialResW, initialResH;
+
+        handle.addEventListener('mousedown', startSigResize);
+        handle.addEventListener('touchstart', startSigResize, {passive: false});
+
+        function startSigResize(e) {
+            e.preventDefault();
+            e.stopPropagation(); // Stop click from passing through to canvas
+            isResizingSig = true;
+            
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            initialResX = clientX;
+            initialResY = clientY;
+            initialResW = parseFloat(marker.style.width);
+            initialResH = parseFloat(marker.style.height);
+            
+            document.addEventListener('mousemove', performSigResize);
+            document.addEventListener('touchmove', performSigResize, {passive: false});
+            document.addEventListener('mouseup', stopSigResize);
+            document.addEventListener('touchend', stopSigResize);
+        }
+
+        function performSigResize(e) {
+            if (!isResizingSig) return;
+            e.preventDefault();
+            
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const dx = clientX - initialResX;
+            const dy = clientY - initialResY;
+            
+            let newW = initialResW + dx;
+            let newH = initialResH + dy;
+            
+            // Enforce minimum dimensions so user doesn't shrink it to nothing
+            if (newW < 20) newW = 20;
+            if (newH < 20) newH = 20;
+            
+            marker.style.width = newW + 'px';
+            marker.style.height = newH + 'px';
+            
+            updateSigCoordinates();
+        }
+
+        function stopSigResize() {
+            isResizingSig = false;
+            document.removeEventListener('mousemove', performSigResize);
+            document.removeEventListener('touchmove', performSigResize);
+            document.removeEventListener('mouseup', stopSigResize);
+            document.removeEventListener('touchend', stopSigResize);
+        }
 
         async function stampSignature() {
             if (!sigPdf) return;
+            
             const pageIndex = parseInt(document.getElementById('sig-page-select').value);
             const x = parseInt(document.getElementById('sig-x').value);
             const y = parseInt(document.getElementById('sig-y').value);
+            const w = parseInt(document.getElementById('sig-w').value);
+            const h = parseInt(document.getElementById('sig-h').value);
+            
             const page = sigPdf.getPage(pageIndex);
             
-            // Convert Canvas to Image
             const imgData = canvas.toDataURL('image/png');
             const imgBytes = await fetch(imgData).then(res => res.arrayBuffer());
             const pngImage = await sigPdf.embedPng(imgBytes);
             
-            // Draw on PDF
-            page.drawImage(pngImage, { x: x, y: y, width: 200, height: 80 });
+            // Pass dynamically updated width & height
+            page.drawImage(pngImage, { x: x, y: y, width: w, height: h });
             downloadPDF(await sigPdf.save(), 'signed.pdf');
             showStatus('sig-status', '✓ Signature stamped!', 'success');
         }
@@ -1211,7 +1298,7 @@
 
                 for (let i = 1; i <= pdfJsDoc.numPages; i++) {
                     const page = await pdfJsDoc.getPage(i);
-                    const viewport = page.getViewport({scale: 2.0}); // High Res
+                    const viewport = page.getViewport({scale: 2.0});
                     const cnv = document.createElement('canvas');
                     cnv.width = viewport.width; cnv.height = viewport.height;
                     await page.render({canvasContext: cnv.getContext('2d'), viewport}).promise;
@@ -1283,7 +1370,6 @@
         let peerInstance = null;
         let activeConnection = null;
 
-        // Auto-Check if device is Receiver based on URL Parameter
         const urlParams = new URLSearchParams(window.location.search);
         const receiveId = urlParams.get('receive_peer');
         
@@ -1304,7 +1390,6 @@
             });
         }
 
-        // Sender Mode Functions
         function initP2PSender() {
             const btn = document.getElementById('p2p-init-btn');
             btn.innerHTML = '<span class="loading"></span> Generating...'; btn.disabled = true;
@@ -1338,7 +1423,6 @@
 
         // ----------------------------------------------------
         // ORIGINAL MODULES (Merge, Split, Extract, Rotate, Delete, Reorder, Compress, Password, Meta, Img2PDF, AddText, WM)
-        // Kept intact, condensed for space.
         // ----------------------------------------------------
         
         let mergeFiles = [];
@@ -1396,7 +1480,6 @@
             downloadPDF(await d.save(), 'extracted.pdf');
         }
 
-        // Delete, Rotate, Reorder use identical thumb structures. Condensing for file limits.
         let delPdf = null; let delSelPgs = new Set();
         async function handleDeleteFile(e) {
             const f = e.target.files[0]; if(!f) return;
