@@ -433,6 +433,44 @@ cameraBtn.addEventListener('click', async () => {
   }
 });
 
+// Tap to focus functionality
+video.addEventListener('pointerdown', async (e) => {
+  if (!currentStream) return;
+  try {
+    const track = currentStream.getVideoTracks()[0];
+    if (!track || !track.getCapabilities) return;
+
+    const capabilities = track.getCapabilities();
+    const advanced = {};
+
+    if (capabilities.focusMode) {
+      if (capabilities.focusMode.includes("single-shot")) {
+        advanced.focusMode = "single-shot";
+      } else if (capabilities.focusMode.includes("continuous")) {
+        advanced.focusMode = "continuous";
+      }
+    }
+
+    const rect = video.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    advanced.pointsOfInterest = [{ x, y }];
+
+    await track.applyConstraints({ advanced: [advanced] });
+
+    // Re-enable continuous focus after a short delay if we switched to single-shot
+    if (advanced.focusMode === 'single-shot' && capabilities.focusMode && capabilities.focusMode.includes("continuous")) {
+      setTimeout(async () => {
+        try {
+          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+        } catch (err) {}
+      }, 2000);
+    }
+  } catch (err) {
+    // Silently ignore constraint errors on unsupported devices
+  }
+});
+
 function stopCamera() {
   if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
   cameraWrap.style.display = 'none';
