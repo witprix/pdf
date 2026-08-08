@@ -94,6 +94,25 @@
     margin-top: 10px;
   }
 
+  /* Visual feedback for camera focus tap */
+  #focusRing {
+    position: fixed;
+    width: 60px;
+    height: 60px;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    pointer-events: none;
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
+    transition: transform 0.25s ease-out, opacity 0.25s ease-out;
+    z-index: 9999;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.3) inset, 0 0 0 1px rgba(0,0,0,0.3);
+  }
+  #focusRing.active {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
   /* Preview + editing */
   #previewWrap { display: none; margin-top: 16px; }
   #canvasHolder {
@@ -433,41 +452,72 @@ cameraBtn.addEventListener('click', async () => {
   }
 });
 
-// Tap to focus functionality
+// Tap to focus functionality with visual feedback and safer fallback
 video.addEventListener('pointerdown', async (e) => {
   if (!currentStream) return;
+  
+  // 1. Show visual focus ring to confirm tap
+  let ring = document.getElementById('focusRing');
+  if (!ring) {
+    ring = document.createElement('div');
+    ring.id = 'focusRing';
+    document.body.appendChild(ring);
+  }
+  ring.style.left = e.clientX + 'px';
+  ring.style.top = e.clientY + 'px';
+  ring.classList.remove('active');
+  void ring.offsetWidth; // Trigger reflow to restart CSS animation
+  ring.classList.add('active');
+  
+  setTimeout(() => {
+    ring.classList.remove('active');
+  }, 1000);
+
+  // 2. Attempt Hardware Focus Control
   try {
     const track = currentStream.getVideoTracks()[0];
     if (!track || !track.getCapabilities) return;
 
     const capabilities = track.getCapabilities();
-    const advanced = {};
+    
+    // If browser/device doesn't expose focus control, stop here
+    if (!capabilities.focusMode) return; 
 
-    if (capabilities.focusMode) {
-      if (capabilities.focusMode.includes("single-shot")) {
-        advanced.focusMode = "single-shot";
-      } else if (capabilities.focusMode.includes("continuous")) {
-        advanced.focusMode = "continuous";
+    // Calculate relative tap position (0.0 to 1.0) for pointOfInterest
+    const rect = video.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+
+    const hasSingle = capabilities.focusMode.includes("single-shot");
+    const hasContinuous = capabilities.focusMode.includes("continuous");
+
+    // Force a "single-shot" focus sweep
+    if (hasSingle) {
+      try {
+        // Try focusing on the exact tap coordinate first
+        await track.applyConstraints({
+          advanced: [{ focusMode: "single-shot", pointsOfInterest: [{ x, y }] }]
+        });
+      } catch (err) {
+        // Fallback: If device rejects exact coordinates, just force a generic re-focus
+        try {
+          await track.applyConstraints({
+            advanced: [{ focusMode: "single-shot" }]
+          });
+        } catch (err2) {}
       }
     }
 
-    const rect = video.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    advanced.pointsOfInterest = [{ x, y }];
-
-    await track.applyConstraints({ advanced: [advanced] });
-
-    // Re-enable continuous focus after a short delay if we switched to single-shot
-    if (advanced.focusMode === 'single-shot' && capabilities.focusMode && capabilities.focusMode.includes("continuous")) {
+    // Re-enable continuous auto-focus after 2 seconds so moving the phone adjusts naturally
+    if (hasContinuous) {
       setTimeout(async () => {
         try {
-          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+          await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
         } catch (err) {}
       }, 2000);
     }
   } catch (err) {
-    // Silently ignore constraint errors on unsupported devices
+    console.warn("Autofocus API not fully supported on this device/browser.", err);
   }
 });
 
