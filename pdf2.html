@@ -666,10 +666,18 @@
                     </div>
                 </div>
 
-                <div class="action-buttons">
-                    <button class="btn btn-primary" onclick="stampSignature()">Stamp & Download</button>
+                <!-- Step 1: Preview Buttons -->
+                <div class="action-buttons" id="sig-action-group-1">
+                    <button class="btn btn-primary" onclick="previewStamp()">Preview Stamp</button>
                     <button class="btn btn-secondary" onclick="clearSigFile()">Start Over</button>
                 </div>
+                
+                <!-- Step 2: Download or Retry Buttons -->
+                <div class="action-buttons" id="sig-action-group-2" style="display:none;">
+                    <button class="btn btn-primary" onclick="downloadStampedPDF()" style="background:#28a745;">Download Signed PDF</button>
+                    <button class="btn btn-secondary" onclick="retryStamp()">Undo Stamp</button>
+                </div>
+
             </div>
             <div class="status" id="sig-status"></div>
         </div>
@@ -1060,7 +1068,6 @@
         let sigPdfJsDoc = null; 
         let sigPreviewScale = 1;
         
-        // Dynamic variables to hold raw PDF dimension targets
         let currentSigWidth = 200; 
         let currentSigHeight = 80; 
         
@@ -1126,13 +1133,19 @@
             previewCanvas.width = viewport.width;
             previewCanvas.height = viewport.height;
             
+            // Reset UI states for preview
             document.getElementById('sig-marker').style.display = 'none';
+            document.getElementById('sig-action-group-1').style.display = 'flex';
+            document.getElementById('sig-action-group-2').style.display = 'none';
+            document.getElementById('sig-status').style.display = 'none';
             
             await page.render({ canvasContext: previewCtx, viewport: viewport }).promise;
         }
 
-        // 1. Move Marker by Clicking Canvas
         document.getElementById('sig-preview-canvas').addEventListener('click', function(e) {
+            // Prevent interaction if we are currently in "preview stamp" mode
+            if (document.getElementById('sig-action-group-1').style.display === 'none') return;
+            
             const rect = this.getBoundingClientRect();
             const clickX = e.clientX - rect.left;
             const clickY = e.clientY - rect.top;
@@ -1140,21 +1153,18 @@
             const marker = document.getElementById('sig-marker');
             marker.style.display = 'block';
             
-            // Apply current scale to dimensions
             const scaledW = currentSigWidth * sigPreviewScale;
             const scaledH = currentSigHeight * sigPreviewScale;
             
             marker.style.width = scaledW + 'px';
             marker.style.height = scaledH + 'px';
             
-            // Center the marker horizontally and vertically on the click coordinates
             marker.style.left = (clickX - (scaledW / 2)) + 'px';
             marker.style.top = (clickY - (scaledH / 2)) + 'px';
             
             updateSigCoordinates();
         });
 
-        // 2. Core math to translate DOM pixels to raw PDF-lib coordinates
         function updateSigCoordinates() {
             const marker = document.getElementById('sig-marker');
             const canvas = document.getElementById('sig-preview-canvas');
@@ -1164,27 +1174,22 @@
             const markerWidth = parseFloat(marker.style.width);
             const markerHeight = parseFloat(marker.style.height);
             
-            // De-scale coordinates back to pure PDF points
             const rawPdfX = markerLeft / sigPreviewScale;
             const rawPdfY = markerTop / sigPreviewScale;
             
             currentSigWidth = Math.round(markerWidth / sigPreviewScale);
             currentSigHeight = Math.round(markerHeight / sigPreviewScale);
             
-            // PDF-lib's Y-axis starts from the BOTTOM, whereas HTML canvas starts from TOP.
-            // We must flip the calculation using the full height of the de-scaled PDF page.
             const pdfCanvasHeight = canvas.height / sigPreviewScale;
             const finalY = Math.round(pdfCanvasHeight - rawPdfY - currentSigHeight);
             const finalX = Math.round(rawPdfX);
             
-            // Update UI
             document.getElementById('sig-x').value = finalX;
             document.getElementById('sig-y').value = finalY;
             document.getElementById('sig-w').value = currentSigWidth;
             document.getElementById('sig-h').value = currentSigHeight;
         }
 
-        // 3. Resizing logic triggered by the bottom right knob
         const handle = document.getElementById('sig-resize-handle');
         const marker = document.getElementById('sig-marker');
         let isResizingSig = false;
@@ -1195,7 +1200,7 @@
 
         function startSigResize(e) {
             e.preventDefault();
-            e.stopPropagation(); // Stop click from passing through to canvas
+            e.stopPropagation(); 
             isResizingSig = true;
             
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -1225,7 +1230,6 @@
             let newW = initialResW + dx;
             let newH = initialResH + dy;
             
-            // Enforce minimum dimensions so user doesn't shrink it to nothing
             if (newW < 20) newW = 20;
             if (newH < 20) newH = 20;
             
@@ -1243,25 +1247,78 @@
             document.removeEventListener('touchend', stopSigResize);
         }
 
-        async function stampSignature() {
+        // --- Step 1: Preview the Stamp ---
+        function previewStamp() {
             if (!sigPdf) return;
             
-            const pageIndex = parseInt(document.getElementById('sig-page-select').value);
-            const x = parseInt(document.getElementById('sig-x').value);
-            const y = parseInt(document.getElementById('sig-y').value);
-            const w = parseInt(document.getElementById('sig-w').value);
-            const h = parseInt(document.getElementById('sig-h').value);
+            const marker = document.getElementById('sig-marker');
+            if (marker.style.display === 'none' || marker.style.display === '') {
+                showStatus('sig-status', 'Please click on the document to place the signature box first.', 'error');
+                return;
+            }
+
+            const previewCanvas = document.getElementById('sig-preview-canvas');
+            const previewCtx = previewCanvas.getContext('2d');
+            const sigCanvas = document.getElementById('signature-canvas');
             
-            const page = sigPdf.getPage(pageIndex);
+            const x = parseFloat(marker.style.left);
+            const y = parseFloat(marker.style.top);
+            const w = parseFloat(marker.style.width);
+            const h = parseFloat(marker.style.height);
+
+            // Draw the user's drawn signature onto the preview canvas
+            previewCtx.drawImage(sigCanvas, x, y, w, h);
+
+            // Hide the marker and toggle to Step 2 buttons
+            marker.style.display = 'none';
+            document.getElementById('sig-action-group-1').style.display = 'none';
+            document.getElementById('sig-action-group-2').style.display = 'flex';
             
-            const imgData = canvas.toDataURL('image/png');
-            const imgBytes = await fetch(imgData).then(res => res.arrayBuffer());
-            const pngImage = await sigPdf.embedPng(imgBytes);
+            showStatus('sig-status', 'Preview generated! Click Download if it looks good, or Undo to try again.', 'info');
+        }
+
+        // --- Step 2a: Retry Stamp ---
+        function retryStamp() {
+            // Re-render the original, clean page
+            renderSigPreview().then(() => {
+                // Show the red marker box again where they left it
+                document.getElementById('sig-marker').style.display = 'block';
+                showStatus('sig-status', 'Stamp erased. You can move the box or redraw your signature.', 'info');
+            });
+        }
+
+        // --- Step 2b: Finalize and Download ---
+        async function downloadStampedPDF() {
+            if (!sigPdf) return;
             
-            // Pass dynamically updated width & height
-            page.drawImage(pngImage, { x: x, y: y, width: w, height: h });
-            downloadPDF(await sigPdf.save(), 'signed.pdf');
-            showStatus('sig-status', '✓ Signature stamped!', 'success');
+            const btn = document.querySelector('#sig-action-group-2 .btn-primary');
+            btn.innerHTML = '<span class="loading"></span> Saving...';
+            btn.disabled = true;
+
+            try {
+                const pageIndex = parseInt(document.getElementById('sig-page-select').value);
+                const x = parseInt(document.getElementById('sig-x').value);
+                const y = parseInt(document.getElementById('sig-y').value);
+                const w = parseInt(document.getElementById('sig-w').value);
+                const h = parseInt(document.getElementById('sig-h').value);
+                
+                const page = sigPdf.getPage(pageIndex);
+                
+                const sigCanvas = document.getElementById('signature-canvas');
+                const imgData = sigCanvas.toDataURL('image/png');
+                const imgBytes = await fetch(imgData).then(res => res.arrayBuffer());
+                const pngImage = await sigPdf.embedPng(imgBytes);
+                
+                page.drawImage(pngImage, { x: x, y: y, width: w, height: h });
+                downloadPDF(await sigPdf.save(), 'signed.pdf');
+                
+                showStatus('sig-status', '✓ Signature stamped & downloaded!', 'success');
+            } catch (e) {
+                showStatus('sig-status', 'Error: ' + e.message, 'error');
+            }
+            
+            btn.innerHTML = 'Download Signed PDF';
+            btn.disabled = false;
         }
 
         function clearSigFile() {
@@ -1271,6 +1328,11 @@
             document.getElementById('sig-upload-area').style.display = 'block';
             document.getElementById('sig-editor').style.display = 'none';
             document.getElementById('sig-marker').style.display = 'none';
+            
+            // Reset button visibility
+            document.getElementById('sig-action-group-1').style.display = 'flex';
+            document.getElementById('sig-action-group-2').style.display = 'none';
+            document.getElementById('sig-status').style.display = 'none';
         }
 
         // ----------------------------------------------------
