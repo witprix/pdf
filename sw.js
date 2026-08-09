@@ -1,7 +1,7 @@
 const CACHE_NAME = 'pdf-toolkit-cache-v1';
 const ASSETS_TO_CACHE = [
     './',
-    './index.html',
+    './pdf3.html',
     './manifest.json',
     './catppuccin--pdf.png',
     // External Libraries
