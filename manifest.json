@@ -1,0 +1,18 @@
+{
+  "name": "PDF Toolkit - All-in-One",
+  "short_name": "PDF Toolkit",
+  "description": "Your all-in-one, client-side PDF editor",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#667eea",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "catppuccin--pdf.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
