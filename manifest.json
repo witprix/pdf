@@ -2,7 +2,7 @@
   "name": "PDF Toolkit - All-in-One",
   "short_name": "PDF Toolkit",
   "description": "Your all-in-one, client-side PDF editor",
-  "start_url": "./",
+  "start_url": "./pdf3.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#667eea",
