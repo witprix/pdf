@@ -542,23 +542,23 @@
         </div>
 
         <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('merge')">Merge</button>
-            <button class="tab-btn" onclick="switchTab('split')">Split</button>
-            <button class="tab-btn" onclick="switchTab('extract')">Extract Pages</button>
-            <button class="tab-btn" onclick="switchTab('delete')">Delete Pages</button>
-            <button class="tab-btn" onclick="switchTab('reorder')">Reorder</button>
-            <button class="tab-btn" onclick="switchTab('editfields')">Form & Fields</button>
-            <button class="tab-btn" onclick="switchTab('signature')">Sign PDF</button>
-            <button class="tab-btn" onclick="switchTab('addtext')">Add Text</button>
-            <button class="tab-btn" onclick="switchTab('watermark')">Watermark</button>
-            <button class="tab-btn" onclick="switchTab('metadata')">Metadata</button>
-            <button class="tab-btn" onclick="switchTab('convert')">Images to PDF</button>
-            <button class="tab-btn" onclick="switchTab('extractimages')">Export ZIP</button>
-            <button class="tab-btn" onclick="switchTab('text-extract')">Extract Text</button>
-            <button class="tab-btn" onclick="switchTab('rotate')">Rotate</button>
-            <button class="tab-btn" onclick="switchTab('compress')">Compress</button>
-            <button class="tab-btn" onclick="switchTab('removepw')">Unlock</button>
-            <button class="tab-btn" onclick="switchTab('p2p-share')">Wi-Fi Share</button>
+            <button class="tab-btn active" data-tab="merge" onclick="switchTab('merge', event)">Merge</button>
+            <button class="tab-btn" data-tab="split" onclick="switchTab('split', event)">Split</button>
+            <button class="tab-btn" data-tab="extract" onclick="switchTab('extract', event)">Extract Pages</button>
+            <button class="tab-btn" data-tab="delete" onclick="switchTab('delete', event)">Delete Pages</button>
+            <button class="tab-btn" data-tab="reorder" onclick="switchTab('reorder', event)">Reorder</button>
+            <button class="tab-btn" data-tab="editfields" onclick="switchTab('editfields', event)">Form & Fields</button>
+            <button class="tab-btn" data-tab="signature" onclick="switchTab('signature', event)">Sign PDF</button>
+            <button class="tab-btn" data-tab="addtext" onclick="switchTab('addtext', event)">Add Text</button>
+            <button class="tab-btn" data-tab="watermark" onclick="switchTab('watermark', event)">Watermark</button>
+            <button class="tab-btn" data-tab="metadata" onclick="switchTab('metadata', event)">Metadata</button>
+            <button class="tab-btn" data-tab="convert" onclick="switchTab('convert', event)">Images to PDF</button>
+            <button class="tab-btn" data-tab="extractimages" onclick="switchTab('extractimages', event)">Export ZIP</button>
+            <button class="tab-btn" data-tab="text-extract" onclick="switchTab('text-extract', event)">Extract Text</button>
+            <button class="tab-btn" data-tab="rotate" onclick="switchTab('rotate', event)">Rotate</button>
+            <button class="tab-btn" data-tab="compress" onclick="switchTab('compress', event)">Compress</button>
+            <button class="tab-btn" data-tab="removepw" onclick="switchTab('removepw', event)">Unlock</button>
+            <button class="tab-btn" data-tab="p2p-share" onclick="switchTab('p2p-share', event)">Wi-Fi Share</button>
         </div>
 
         <div id="merge" class="tab-content active">
@@ -986,17 +986,28 @@
         // ----------------------------------------------------
         // UTILITY FUNCTIONS
         // ----------------------------------------------------
-        function switchTab(tabName) {
+        function switchTab(tabName, evt) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(tabName).classList.add('active');
-            event.target.classList.add('active');
+            const btn = (evt && evt.target) ? evt.target : document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+            if (btn) btn.classList.add('active');
+            try { localStorage.setItem('pdftk-last-tab', tabName); } catch(e) {}
         }
 
         function toggleTheme() {
             const body = document.body;
-            body.getAttribute('data-theme') === 'dark' ? body.removeAttribute('data-theme') : body.setAttribute('data-theme', 'dark');
+            const isDark = body.getAttribute('data-theme') === 'dark';
+            if (isDark) body.removeAttribute('data-theme'); else body.setAttribute('data-theme', 'dark');
+            try { localStorage.setItem('pdftk-theme', isDark ? 'light' : 'dark'); } catch(e) {}
         }
+
+        // Restore saved theme & last tab on load
+        (function initPreferences() {
+            try {
+                if (localStorage.getItem('pdftk-theme') === 'dark') document.body.setAttribute('data-theme', 'dark');
+            } catch(e) {}
+        })();
 
         function showStatus(elementId, message, type) {
             const status = document.getElementById(elementId);
@@ -1134,6 +1145,28 @@
             pdfJsDoc.destroy();
         }
 
+        // Builds a keyboard-accessible, clickable page thumbnail shell.
+        // onToggle(selectedBool) fires after the 'selected' class is toggled by click or Enter/Space.
+        function makeSelectableThumb(pageIndex, onToggle) {
+            const d = document.createElement('div');
+            d.className = 'page-thumbnail';
+            d.tabIndex = 0;
+            d.setAttribute('role', 'button');
+            d.setAttribute('aria-pressed', 'false');
+            d.dataset.pageNum = pageIndex + 1;
+            d.innerHTML = `<div class="page-preview" data-page-num="${pageIndex + 1}"></div>Page ${pageIndex + 1}`;
+            const toggle = () => {
+                d.classList.toggle('selected');
+                d.setAttribute('aria-pressed', d.classList.contains('selected') ? 'true' : 'false');
+                onToggle(d.classList.contains('selected'));
+            };
+            d.addEventListener('click', toggle);
+            d.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+            });
+            return d;
+        }
+
         function parsePageNumbers(input, maxPages) {
             const pages = [];
             input.split(',').map(p => p.trim()).forEach(part => {
@@ -1157,8 +1190,15 @@
         async function handleEditFieldsFile(event) {
             const file = event.target.files[0];
             if (!file) return;
-            const buffer = await file.arrayBuffer();
-            editFieldsPDF = await PDFLib.PDFDocument.load(buffer);
+            let buffer;
+            try {
+                buffer = await file.arrayBuffer();
+                editFieldsPDF = await PDFLib.PDFDocument.load(buffer);
+            } catch(err) {
+                editFieldsPDF = null;
+                showStatus('editfields-status', '✗ Could not read this PDF: ' + err.message, 'error');
+                return;
+            }
             const form = editFieldsPDF.getForm();
             formFields = form.getFields();
 
@@ -1307,17 +1347,22 @@
         async function handleSigFile(event) {
             const file = event.target.files[0];
             if (!file) return;
-            const buffer = await file.arrayBuffer();
-            sigPdf = await PDFLib.PDFDocument.load(buffer);
-            sigPdfJsDoc = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise;
-            const select = document.getElementById('sig-page-select');
-            select.innerHTML = '';
-            for (let i = 0; i < sigPdf.getPageCount(); i++) { select.innerHTML += `<option value="${i}">Page ${i+1}</option>`; }
-            select.addEventListener('change', renderSigPreview);
-            document.getElementById('sig-upload-area').style.display = 'none';
-            document.getElementById('sig-editor').style.display = 'block';
-            clearSignature();
-            renderSigPreview();
+            try {
+                const buffer = await file.arrayBuffer();
+                sigPdf = await PDFLib.PDFDocument.load(buffer);
+                sigPdfJsDoc = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise;
+                const select = document.getElementById('sig-page-select');
+                select.innerHTML = '';
+                for (let i = 0; i < sigPdf.getPageCount(); i++) { select.innerHTML += `<option value="${i}">Page ${i+1}</option>`; }
+                select.addEventListener('change', renderSigPreview);
+                document.getElementById('sig-upload-area').style.display = 'none';
+                document.getElementById('sig-editor').style.display = 'block';
+                clearSignature();
+                renderSigPreview();
+            } catch(err) {
+                sigPdf = null; sigPdfJsDoc = null;
+                showStatus('sig-status', '✗ Could not read this PDF: ' + err.message, 'error');
+            }
         }
         
         async function renderSigPreview() {
@@ -1442,9 +1487,19 @@
             await yieldToUI();
             try {
                 const doc = await PDFLib.PDFDocument.create();
-                for (const f of mergeFiles) { const p = await PDFLib.PDFDocument.load(await f.arrayBuffer()); const cp = await doc.copyPages(p, p.getPageIndices()); cp.forEach(pg => doc.addPage(pg)); }
+                for (const f of mergeFiles) {
+                    try {
+                        const p = await PDFLib.PDFDocument.load(await f.arrayBuffer(), { ignoreEncryption: true });
+                        const cp = await doc.copyPages(p, p.getPageIndices());
+                        cp.forEach(pg => doc.addPage(pg));
+                    } catch(inner) {
+                        throw new Error(`Could not read "${f.name}" — it may be corrupted or password protected.`);
+                    }
+                }
                 showGlobalPreview(await doc.save(), 'merged.pdf');
-            } catch(e){} 
+            } catch(e) {
+                showStatus('merge-status', '✗ ' + e.message, 'error');
+            }
             btn.innerHTML = 'Preview & Merge'; btn.disabled = false;
         }
 
@@ -1452,11 +1507,13 @@
         let splitTotalPages = 0;
         async function handleSplitFile(e) { 
             const file = e.target.files[0]; if(!file)return;
-            splitPdfBytes = await file.arrayBuffer();
-            const doc = await PDFLib.PDFDocument.load(splitPdfBytes, { ignoreEncryption: true });
-            splitTotalPages = doc.getPageCount();
-            document.getElementById('split-info').innerText = `${file.name} - ${splitTotalPages} pages`;
-            document.getElementById('split-options').style.display='block'; document.getElementById('split-btn').disabled=false;
+            try {
+                splitPdfBytes = await file.arrayBuffer();
+                const doc = await PDFLib.PDFDocument.load(splitPdfBytes, { ignoreEncryption: true });
+                splitTotalPages = doc.getPageCount();
+                document.getElementById('split-info').innerText = `${file.name} - ${splitTotalPages} pages`;
+                document.getElementById('split-options').style.display='block'; document.getElementById('split-btn').disabled=false;
+            } catch(err) { splitPdfBytes = null; showStatus('split-status', '✗ Could not read this PDF: ' + err.message, 'error'); }
         }
         function updateSplitModeUI() { const m = document.getElementById('split-mode').value; document.getElementById('split-range-opts').style.display = (m==='range')?'block':'none'; }
         function clearSplitFile() { splitPdfBytes=null; document.getElementById('split-file').value=''; document.getElementById('split-info').innerText=''; document.getElementById('split-options').style.display='none'; document.getElementById('split-btn').disabled=true; }
@@ -1465,17 +1522,50 @@
             const btn = document.getElementById('split-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
             const m = document.getElementById('split-mode').value;
-            const srcDoc = await PDFLib.PDFDocument.load(splitPdfBytes);
-            
-            if(m==='all') {
-                for(let i=0; i<splitTotalPages; i++){ const d = await PDFLib.PDFDocument.create(); const [p] = await d.copyPages(srcDoc, [i]); d.addPage(p); downloadPDF(await d.save(), `page_${i+1}.pdf`); }
-            } else if (m==='half') {
-                const mid = Math.ceil(splitTotalPages/2);
-                const d1 = await PDFLib.PDFDocument.create(); const p1 = await d1.copyPages(srcDoc, Array.from({length: mid}, (_, i) => i)); p1.forEach(p=>d1.addPage(p)); downloadPDF(await d1.save(), 'part1.pdf');
-                const d2 = await PDFLib.PDFDocument.create(); const p2 = await d2.copyPages(srcDoc, Array.from({length: splitTotalPages-mid}, (_, i) => i+mid)); p2.forEach(p=>d2.addPage(p)); downloadPDF(await d2.save(), 'part2.pdf');
-            } else if (m==='range') {
-                const r = parsePageNumbers(document.getElementById('split-range-input').value, splitTotalPages).map(p=>p-1);
-                if(r.length>0){ const d = await PDFLib.PDFDocument.create(); const pgs = await d.copyPages(srcDoc, r); pgs.forEach(p=>d.addPage(p)); showGlobalPreview(await d.save(), `extracted.pdf`); }
+            try {
+                const srcDoc = await PDFLib.PDFDocument.load(splitPdfBytes);
+
+                if(m==='all') {
+                    // Bundle into a single ZIP instead of firing N downloads at once —
+                    // browsers throttle/block rapid multi-file downloads.
+                    const zip = new JSZip();
+                    const padLen = String(splitTotalPages).length;
+                    for(let i=0; i<splitTotalPages; i++){
+                        const d = await PDFLib.PDFDocument.create();
+                        const [p] = await d.copyPages(srcDoc, [i]);
+                        d.addPage(p);
+                        const bytes = await d.save();
+                        zip.file(`page_${String(i+1).padStart(padLen,'0')}.pdf`, bytes);
+                        if (i % 5 === 0) await yieldToUI();
+                    }
+                    const content = await zip.generateAsync({type:'blob'});
+                    const url = URL.createObjectURL(content);
+                    const a = document.createElement('a'); a.href = url; a.download = 'split_pages.zip'; a.click();
+                    URL.revokeObjectURL(url);
+                    showStatus('split-status', `✓ ${splitTotalPages} pages packed into split_pages.zip`, 'success');
+                } else if (m==='half') {
+                    const zip = new JSZip();
+                    const mid = Math.ceil(splitTotalPages/2);
+                    const d1 = await PDFLib.PDFDocument.create(); const p1 = await d1.copyPages(srcDoc, Array.from({length: mid}, (_, i) => i)); p1.forEach(p=>d1.addPage(p));
+                    const d2 = await PDFLib.PDFDocument.create(); const p2 = await d2.copyPages(srcDoc, Array.from({length: splitTotalPages-mid}, (_, i) => i+mid)); p2.forEach(p=>d2.addPage(p));
+                    zip.file('part1.pdf', await d1.save());
+                    zip.file('part2.pdf', await d2.save());
+                    const content = await zip.generateAsync({type:'blob'});
+                    const url = URL.createObjectURL(content);
+                    const a = document.createElement('a'); a.href = url; a.download = 'split_halves.zip'; a.click();
+                    URL.revokeObjectURL(url);
+                    showStatus('split-status', '✓ Both halves packed into split_halves.zip', 'success');
+                } else if (m==='range') {
+                    const r = parsePageNumbers(document.getElementById('split-range-input').value, splitTotalPages).map(p=>p-1);
+                    if(r.length>0){
+                        const d = await PDFLib.PDFDocument.create(); const pgs = await d.copyPages(srcDoc, r); pgs.forEach(p=>d.addPage(p));
+                        showGlobalPreview(await d.save(), `extracted.pdf`);
+                    } else {
+                        showStatus('split-status', 'Enter a valid page range, e.g. 3-8', 'error');
+                    }
+                }
+            } catch(err) {
+                showStatus('split-status', '✗ Split failed: ' + err.message, 'error');
             }
             btn.innerHTML = 'Process Split'; btn.disabled = false;
         }
@@ -1483,24 +1573,31 @@
         let exPdfBytes = null; let exTotalPages = 0; let selPgs = new Set();
         async function handleExtractFile(e) {
             const f = e.target.files[0]; if(!f) return;
-            exPdfBytes = await f.arrayBuffer();
-            const doc = await PDFLib.PDFDocument.load(exPdfBytes, { ignoreEncryption: true });
-            exTotalPages = doc.getPageCount(); selPgs.clear();
-            const cont = document.getElementById('extract-thumbs'); cont.innerHTML='';
-            for(let i=0; i<exTotalPages; i++) {
-                const d = document.createElement('div'); d.className='page-thumbnail'; d.onclick=()=>{d.classList.toggle('selected'); d.classList.contains('selected')?selPgs.add(i):selPgs.delete(i);};
-                d.innerHTML=`<div class="page-preview" data-page-num="${i+1}"></div>Page ${i+1}`; cont.appendChild(d);
-            }
-            renderAllThumbnails(f, 'extract-thumbs'); document.getElementById('extract-btn').disabled=false;
+            try {
+                exPdfBytes = await f.arrayBuffer();
+                const doc = await PDFLib.PDFDocument.load(exPdfBytes, { ignoreEncryption: true });
+                exTotalPages = doc.getPageCount(); selPgs.clear();
+                const cont = document.getElementById('extract-thumbs'); cont.innerHTML='';
+                for(let i=0; i<exTotalPages; i++) {
+                    const d = makeSelectableThumb(i, ()=>{ d.classList.contains('selected')?selPgs.add(i):selPgs.delete(i); });
+                    cont.appendChild(d);
+                }
+                renderAllThumbnails(f, 'extract-thumbs'); document.getElementById('extract-btn').disabled=false;
+            } catch(err) { exPdfBytes = null; showStatus('extract-status', '✗ Could not read this PDF: ' + err.message, 'error'); }
         }
         function clearExtractFile() { exPdfBytes=null; document.getElementById('extract-thumbs').innerHTML=''; document.getElementById('extract-btn').disabled=true; }
         async function extractPages() {
-            if(!exPdfBytes || selPgs.size===0) return;
+            if(!exPdfBytes) return;
+            if(selPgs.size===0) { showStatus('extract-status', 'Select at least one page first.', 'error'); return; }
             const btn = document.getElementById('extract-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
-            const srcDoc = await PDFLib.PDFDocument.load(exPdfBytes);
-            const d = await PDFLib.PDFDocument.create(); const cp = await d.copyPages(srcDoc, Array.from(selPgs).sort((a,b)=>a-b)); cp.forEach(p=>d.addPage(p));
-            showGlobalPreview(await d.save(), 'extracted.pdf');
+            try {
+                const srcDoc = await PDFLib.PDFDocument.load(exPdfBytes);
+                const d = await PDFLib.PDFDocument.create(); const cp = await d.copyPages(srcDoc, Array.from(selPgs).sort((a,b)=>a-b)); cp.forEach(p=>d.addPage(p));
+                showGlobalPreview(await d.save(), 'extracted.pdf');
+            } catch(err) {
+                showStatus('extract-status', '✗ Could not extract pages: ' + err.message, 'error');
+            }
             btn.innerHTML = 'Preview Extraction'; btn.disabled = false;
         }
 
@@ -1508,19 +1605,22 @@
         let delPdfBytes = null; let delTotalPages = 0; let delSelPgs = new Set();
         async function handleDeleteFile(e) {
             const f = e.target.files[0]; if(!f) return;
-            delPdfBytes = await f.arrayBuffer();
-            const doc = await PDFLib.PDFDocument.load(delPdfBytes, { ignoreEncryption: true });
-            delTotalPages = doc.getPageCount(); delSelPgs.clear();
-            const cont = document.getElementById('delete-thumbs'); cont.innerHTML='';
-            for(let i=0; i<delTotalPages; i++) {
-                const d = document.createElement('div'); d.className='page-thumbnail'; d.onclick=()=>{d.classList.toggle('selected'); d.classList.contains('selected')?delSelPgs.add(i):delSelPgs.delete(i);};
-                d.innerHTML=`<div class="page-preview" data-page-num="${i+1}"></div>Page ${i+1}`; cont.appendChild(d);
-            }
-            renderAllThumbnails(f, 'delete-thumbs'); document.getElementById('delete-btn').disabled=false;
+            try {
+                delPdfBytes = await f.arrayBuffer();
+                const doc = await PDFLib.PDFDocument.load(delPdfBytes, { ignoreEncryption: true });
+                delTotalPages = doc.getPageCount(); delSelPgs.clear();
+                const cont = document.getElementById('delete-thumbs'); cont.innerHTML='';
+                for(let i=0; i<delTotalPages; i++) {
+                    const d = makeSelectableThumb(i, ()=>{ d.classList.contains('selected')?delSelPgs.add(i):delSelPgs.delete(i); });
+                    cont.appendChild(d);
+                }
+                renderAllThumbnails(f, 'delete-thumbs'); document.getElementById('delete-btn').disabled=false;
+            } catch(err) { delPdfBytes = null; showStatus('delete-status', '✗ Could not read this PDF: ' + err.message, 'error'); }
         }
         function clearDeleteFile() { delPdfBytes=null; document.getElementById('delete-thumbs').innerHTML=''; document.getElementById('delete-btn').disabled=true; }
         async function deletePages() {
-            if(!delPdfBytes || delSelPgs.size===0) return;
+            if(!delPdfBytes) return;
+            if(delSelPgs.size===0) { showStatus('delete-status', 'Select at least one page to delete.', 'error'); return; }
             const btn = document.getElementById('delete-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI(); // Paint UI spinner before execution
             
@@ -1547,41 +1647,53 @@
         let rotPdfBytes = null; let rotTotalPages = 0; let rotSelPgs = new Set();
         async function handleRotateFile(e) {
             const f = e.target.files[0]; if(!f) return;
-            rotPdfBytes = await f.arrayBuffer();
-            const doc = await PDFLib.PDFDocument.load(rotPdfBytes, { ignoreEncryption: true });
-            rotTotalPages = doc.getPageCount(); rotSelPgs.clear();
-            const cont = document.getElementById('rotate-thumbs'); cont.innerHTML='';
-            for(let i=0; i<rotTotalPages; i++) {
-                const d = document.createElement('div'); d.className='page-thumbnail'; d.onclick=()=>{d.classList.toggle('selected'); d.classList.contains('selected')?rotSelPgs.add(i):rotSelPgs.delete(i);};
-                d.innerHTML=`<div class="page-preview" data-page-num="${i+1}"></div>Page ${i+1}`; cont.appendChild(d);
-            }
-            renderAllThumbnails(f, 'rotate-thumbs'); document.getElementById('rotate-btn').disabled=false;
+            try {
+                rotPdfBytes = await f.arrayBuffer();
+                const doc = await PDFLib.PDFDocument.load(rotPdfBytes, { ignoreEncryption: true });
+                rotTotalPages = doc.getPageCount(); rotSelPgs.clear();
+                const cont = document.getElementById('rotate-thumbs'); cont.innerHTML='';
+                for(let i=0; i<rotTotalPages; i++) {
+                    const d = makeSelectableThumb(i, ()=>{ d.classList.contains('selected')?rotSelPgs.add(i):rotSelPgs.delete(i); });
+                    cont.appendChild(d);
+                }
+                renderAllThumbnails(f, 'rotate-thumbs'); document.getElementById('rotate-btn').disabled=false;
+            } catch(err) { rotPdfBytes = null; showStatus('rotate-status', '✗ Could not read this PDF: ' + err.message, 'error'); }
         }
         function clearRotateFile() { rotPdfBytes=null; document.getElementById('rotate-thumbs').innerHTML=''; document.getElementById('rotate-btn').disabled=true; }
         async function rotatePages() {
-            if(!rotPdfBytes || rotSelPgs.size===0) return;
+            if(!rotPdfBytes) return;
+            if(rotSelPgs.size===0) { showStatus('rotate-status', 'Select at least one page to rotate.', 'error'); return; }
             const btn = document.getElementById('rotate-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
-            const srcDoc = await PDFLib.PDFDocument.load(rotPdfBytes);
-            const ang = parseInt(document.getElementById('rotate-angle').value);
-            Array.from(rotSelPgs).forEach(i => { const p=srcDoc.getPage(i); p.setRotation(PDFLib.degrees(p.getRotation().angle+ang)); });
-            showGlobalPreview(await srcDoc.save(), 'rotated.pdf');
+            try {
+                const srcDoc = await PDFLib.PDFDocument.load(rotPdfBytes);
+                const ang = parseInt(document.getElementById('rotate-angle').value);
+                Array.from(rotSelPgs).forEach(i => { const p=srcDoc.getPage(i); p.setRotation(PDFLib.degrees(p.getRotation().angle+ang)); });
+                showGlobalPreview(await srcDoc.save(), 'rotated.pdf');
+            } catch(err) {
+                showStatus('rotate-status', '✗ Could not rotate pages: ' + err.message, 'error');
+            }
             btn.innerHTML = 'Preview Rotation'; btn.disabled = false;
         }
 
         let rePdfBytes = null; let reTotalPages = 0; let reSeq = [];
         async function handleReorderFile(e) {
             const f = e.target.files[0]; if(!f) return;
-            rePdfBytes = await f.arrayBuffer();
-            const doc = await PDFLib.PDFDocument.load(rePdfBytes, { ignoreEncryption: true });
-            reTotalPages = doc.getPageCount(); reSeq=[];
-            const cont = document.getElementById('reorder-thumbs'); cont.innerHTML='';
-            for(let i=0; i<reTotalPages; i++) {
-                const d = document.createElement('div'); d.className='page-thumbnail'; d.dataset.pageNum=i+1;
-                d.onclick=()=>{ const num=i+1; const idx=reSeq.indexOf(num); if(idx>=0) reSeq.splice(idx,1); else reSeq.push(num); syncRe(); };
-                d.innerHTML=`<div class="page-preview" data-page-num="${i+1}"></div>Page ${i+1}`; cont.appendChild(d);
-            }
-            renderAllThumbnails(f, 'reorder-thumbs'); document.getElementById('reorder-btn').disabled=false;
+            try {
+                rePdfBytes = await f.arrayBuffer();
+                const doc = await PDFLib.PDFDocument.load(rePdfBytes, { ignoreEncryption: true });
+                reTotalPages = doc.getPageCount(); reSeq=[];
+                const cont = document.getElementById('reorder-thumbs'); cont.innerHTML='';
+                for(let i=0; i<reTotalPages; i++) {
+                    const d = document.createElement('div'); d.className='page-thumbnail'; d.dataset.pageNum=i+1;
+                    d.tabIndex = 0; d.setAttribute('role', 'button');
+                    const toggleReorder = () => { const num=i+1; const idx=reSeq.indexOf(num); if(idx>=0) reSeq.splice(idx,1); else reSeq.push(num); syncRe(); };
+                    d.onclick = toggleReorder;
+                    d.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleReorder(); } });
+                    d.innerHTML=`<div class="page-preview" data-page-num="${i+1}"></div>Page ${i+1}`; cont.appendChild(d);
+                }
+                renderAllThumbnails(f, 'reorder-thumbs'); document.getElementById('reorder-btn').disabled=false;
+            } catch(err) { rePdfBytes = null; showStatus('reorder-status', '✗ Could not read this PDF: ' + err.message, 'error'); }
         }
         function syncRe(){ 
             document.getElementById('reorder-order').value = reSeq.join(',');
@@ -1591,12 +1703,20 @@
         function resetReorderSequence() { reSeq=[]; syncRe(); }
         function clearReorderFile() { rePdfBytes=null; document.getElementById('reorder-thumbs').innerHTML=''; document.getElementById('reorder-btn').disabled=true; }
         async function reorderPages() {
-            if(!rePdfBytes || reSeq.length!==reTotalPages) return;
+            if(!rePdfBytes) return;
+            if(reSeq.length!==reTotalPages) {
+                showStatus('reorder-status', `Sequence must include all ${reTotalPages} pages exactly once (currently ${reSeq.length}).`, 'error');
+                return;
+            }
             const btn = document.getElementById('reorder-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
-            const srcDoc = await PDFLib.PDFDocument.load(rePdfBytes);
-            const d = await PDFLib.PDFDocument.create(); const cp = await d.copyPages(srcDoc, reSeq.map(n=>n-1)); cp.forEach(p=>d.addPage(p));
-            showGlobalPreview(await d.save(), 'reordered.pdf');
+            try {
+                const srcDoc = await PDFLib.PDFDocument.load(rePdfBytes);
+                const d = await PDFLib.PDFDocument.create(); const cp = await d.copyPages(srcDoc, reSeq.map(n=>n-1)); cp.forEach(p=>d.addPage(p));
+                showGlobalPreview(await d.save(), 'reordered.pdf');
+            } catch(err) {
+                showStatus('reorder-status', '✗ Could not reorder pages: ' + err.message, 'error');
+            }
             btn.innerHTML = 'Preview Reorder'; btn.disabled = false;
         }
 
@@ -1655,70 +1775,93 @@
         let atPdfBytes = null;
         async function handleAddTextFile(e) {
             const f = e.target.files[0]; if(!f) return;
-            atPdfBytes = await f.arrayBuffer();
-            const pdf = await PDFLib.PDFDocument.load(atPdfBytes, { ignoreEncryption: true });
-            const s = document.getElementById('addtext-page'); s.innerHTML='';
-            for(let i=0; i<pdf.getPageCount(); i++) s.innerHTML+=`<option value="${i}">Page ${i+1}</option>`;
-            document.getElementById('addtext-tools').style.display='block';
+            try {
+                atPdfBytes = await f.arrayBuffer();
+                const pdf = await PDFLib.PDFDocument.load(atPdfBytes, { ignoreEncryption: true });
+                const s = document.getElementById('addtext-page'); s.innerHTML='';
+                for(let i=0; i<pdf.getPageCount(); i++) s.innerHTML+=`<option value="${i}">Page ${i+1}</option>`;
+                document.getElementById('addtext-tools').style.display='block';
+            } catch(err) { atPdfBytes = null; showStatus('addtext-status', '✗ Could not read this PDF: ' + err.message, 'error'); }
         }
-        function clearAddTextFile() { atPdfBytes=null; document.getElementById('addtext-file').value=''; document.getElementById('addtext-tools').style.display='none'; }
+        function clearAddTextFile() { atPdfBytes=null; document.getElementById('addtext-file').value=''; document.getElementById('addtext-tools').style.display='none'; document.getElementById('addtext-content').value=''; document.getElementById('addtext-status').style.display='none'; }
         async function addTextToPDF() {
             if(!atPdfBytes) return;
+            const text = document.getElementById('addtext-content').value;
+            if (!text) { showStatus('addtext-status', 'Enter some text to add first.', 'error'); return; }
             const btn = document.getElementById('addtext-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
-            
-            const docCopy = await PDFLib.PDFDocument.load(atPdfBytes);
-            const p = docCopy.getPage(parseInt(document.getElementById('addtext-page').value));
-            const c = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(document.getElementById('addtext-color').value);
-            p.drawText(document.getElementById('addtext-content').value, {
-                x: parseInt(document.getElementById('addtext-x').value),
-                y: p.getSize().height - parseInt(document.getElementById('addtext-y').value),
-                size: parseInt(document.getElementById('addtext-fontsize').value),
-                color: PDFLib.rgb(parseInt(c[1],16)/255, parseInt(c[2],16)/255, parseInt(c[3],16)/255)
-            });
-            showGlobalPreview(await docCopy.save(), 'text_added.pdf');
-            
+            try {
+                const docCopy = await PDFLib.PDFDocument.load(atPdfBytes);
+                const p = docCopy.getPage(parseInt(document.getElementById('addtext-page').value));
+                const c = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(document.getElementById('addtext-color').value) || [null,'00','00','00'];
+                p.drawText(text, {
+                    x: parseInt(document.getElementById('addtext-x').value) || 0,
+                    y: p.getSize().height - (parseInt(document.getElementById('addtext-y').value) || 0),
+                    size: parseInt(document.getElementById('addtext-fontsize').value) || 12,
+                    color: PDFLib.rgb(parseInt(c[1],16)/255, parseInt(c[2],16)/255, parseInt(c[3],16)/255)
+                });
+                showGlobalPreview(await docCopy.save(), 'text_added.pdf');
+            } catch(err) {
+                showStatus('addtext-status', '✗ Could not add text: ' + err.message, 'error');
+            }
             btn.innerHTML = 'Preview Addition'; btn.disabled = false;
         }
 
         let wmPdfBytes = null;
-        async function handleWmFile(e) { wmPdfBytes = await e.target.files[0].arrayBuffer(); document.getElementById('wm-btn').disabled=false; }
-        function clearWmFile() { wmPdfBytes=null; document.getElementById('wm-file').value=''; document.getElementById('wm-btn').disabled=true; }
+        async function handleWmFile(e) {
+            const f = e.target.files[0]; if (!f) return;
+            try {
+                wmPdfBytes = await f.arrayBuffer();
+                await PDFLib.PDFDocument.load(wmPdfBytes, { ignoreEncryption: true });
+                document.getElementById('wm-btn').disabled = false;
+            } catch(err) { wmPdfBytes = null; showStatus('wm-status', '✗ Could not read this PDF: ' + err.message, 'error'); }
+        }
+        function clearWmFile() { wmPdfBytes=null; document.getElementById('wm-file').value=''; document.getElementById('wm-btn').disabled=true; document.getElementById('wm-text').value=''; document.getElementById('wm-pages').value='none'; document.getElementById('wm-status').style.display='none'; }
         async function applyWatermark() {
             if(!wmPdfBytes) return;
             const btn = document.getElementById('wm-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
             
-            const docCopy = await PDFLib.PDFDocument.load(wmPdfBytes);
-            const txt = document.getElementById('wm-text').value; const pgs = document.getElementById('wm-pages').value === 'bottom';
-            docCopy.getPages().forEach((p, i) => {
-                const s = p.getSize();
-                if(txt) p.drawText(txt, { x: s.width/2-100, y: s.height/2, size: 60, color: PDFLib.rgb(0.7,0.7,0.7), opacity: 0.3, rotate: PDFLib.degrees(45) });
-                if(pgs) p.drawText(`Page ${i+1} of ${docCopy.getPageCount()}`, { x: s.width/2-30, y: 30, size: 12 });
-            });
-            showGlobalPreview(await docCopy.save(), 'watermarked.pdf');
-            
+            try {
+                const docCopy = await PDFLib.PDFDocument.load(wmPdfBytes);
+                const txt = document.getElementById('wm-text').value; const pgs = document.getElementById('wm-pages').value === 'bottom';
+                if (!txt && !pgs) { showStatus('wm-status', 'Enter watermark text or enable page numbers first.', 'error'); btn.innerHTML = 'Preview Watermark'; btn.disabled = false; return; }
+                docCopy.getPages().forEach((p, i) => {
+                    const s = p.getSize();
+                    if(txt) p.drawText(txt, { x: s.width/2 - (txt.length*15), y: s.height/2, size: 60, color: PDFLib.rgb(0.7,0.7,0.7), opacity: 0.3, rotate: PDFLib.degrees(45) });
+                    if(pgs) p.drawText(`Page ${i+1} of ${docCopy.getPageCount()}`, { x: s.width/2-30, y: 30, size: 12 });
+                });
+                showGlobalPreview(await docCopy.save(), 'watermarked.pdf');
+            } catch(err) {
+                showStatus('wm-status', '✗ Could not apply watermark: ' + err.message, 'error');
+            }
             btn.innerHTML = 'Preview Watermark'; btn.disabled = false;
         }
 
         let mPdfBytes = null;
         async function handleMetaFile(e) {
-            mPdfBytes = await e.target.files[0].arrayBuffer();
-            const doc = await PDFLib.PDFDocument.load(mPdfBytes, { ignoreEncryption: true });
-            document.getElementById('meta-title').value = doc.getTitle()||''; document.getElementById('meta-author').value = doc.getAuthor()||'';
-            document.getElementById('meta-subject').value = doc.getSubject()||''; document.getElementById('meta-inputs').style.display='block';
+            const f = e.target.files[0]; if (!f) return;
+            try {
+                mPdfBytes = await f.arrayBuffer();
+                const doc = await PDFLib.PDFDocument.load(mPdfBytes, { ignoreEncryption: true });
+                document.getElementById('meta-title').value = doc.getTitle()||''; document.getElementById('meta-author').value = doc.getAuthor()||'';
+                document.getElementById('meta-subject').value = doc.getSubject()||''; document.getElementById('meta-inputs').style.display='block';
+            } catch(err) { mPdfBytes = null; showStatus('meta-status', '✗ Could not read this PDF: ' + err.message, 'error'); }
         }
-        function clearMetaFile() { mPdfBytes=null; document.getElementById('meta-file').value=''; document.getElementById('meta-inputs').style.display='none'; }
+        function clearMetaFile() { mPdfBytes=null; document.getElementById('meta-file').value=''; document.getElementById('meta-inputs').style.display='none'; document.getElementById('meta-title').value=''; document.getElementById('meta-author').value=''; document.getElementById('meta-subject').value=''; document.getElementById('meta-status').style.display='none'; }
         async function saveMetadata() {
             if(!mPdfBytes) return; 
             const btn = document.querySelector('#metadata .btn-primary'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
             
-            const docCopy = await PDFLib.PDFDocument.load(mPdfBytes);
-            docCopy.setTitle(document.getElementById('meta-title').value); docCopy.setAuthor(document.getElementById('meta-author').value);
-            docCopy.setSubject(document.getElementById('meta-subject').value); 
-            showGlobalPreview(await docCopy.save(), 'metadata.pdf');
-            
+            try {
+                const docCopy = await PDFLib.PDFDocument.load(mPdfBytes);
+                docCopy.setTitle(document.getElementById('meta-title').value); docCopy.setAuthor(document.getElementById('meta-author').value);
+                docCopy.setSubject(document.getElementById('meta-subject').value);
+                showGlobalPreview(await docCopy.save(), 'metadata.pdf');
+            } catch(err) {
+                showStatus('meta-status', '✗ Could not save metadata: ' + err.message, 'error');
+            }
             btn.innerHTML = 'Preview Metadata'; btn.disabled = false;
         }
 
@@ -1735,7 +1878,9 @@
                     doc.addPage([img.width, img.height]).drawImage(img, {x:0, y:0, width:img.width, height:img.height});
                 }
                 showGlobalPreview(await doc.save(), 'images_converted.pdf');
-            } catch(e) {}
+            } catch(e) {
+                showStatus('convert-status', '✗ Could not convert one or more images: ' + e.message, 'error');
+            }
             btn.innerHTML = 'Preview Conversion'; btn.disabled = false;
         }
 
@@ -1802,8 +1947,13 @@
             peerInstance.on('open', () => {
                 activeConnection = peerInstance.connect(receiveId);
                 activeConnection.on('open', () => { document.getElementById('receive-status').innerText = 'Connected! Waiting for sender...'; });
-                activeConnection.on('data', (data) => { document.getElementById('receive-loader').style.display = 'none'; document.getElementById('receive-status').innerText = `Receiving: ${data.name}... Downloading!`; downloadPDF(data.file, data.name); });
-                activeConnection.on('error', () => { document.getElementById('receive-status').innerText = 'Connection lost.'; });
+                activeConnection.on('data', (data) => { document.getElementById('receive-loader').style.display = 'none'; document.getElementById('receive-status').innerText = `Received: ${data.name} — downloading!`; downloadPDF(data.file, data.name); });
+                activeConnection.on('error', () => { document.getElementById('receive-loader').style.display = 'none'; document.getElementById('receive-status').innerText = 'Connection lost.'; });
+                activeConnection.on('close', () => { document.getElementById('receive-loader').style.display = 'none'; document.getElementById('receive-status').innerText = 'Sender disconnected.'; });
+            });
+            peerInstance.on('error', (err) => {
+                document.getElementById('receive-loader').style.display = 'none';
+                document.getElementById('receive-status').innerText = 'Could not connect: ' + err.type + '. Go back and try scanning again.';
             });
         }
         function initP2PSender() {
@@ -1822,13 +1972,28 @@
                     document.getElementById('p2p-conn-status').style.color = "#28a745";
                     document.getElementById('p2p-send-controls').style.display = 'block';
                 });
+                activeConnection.on('close', () => {
+                    document.getElementById('p2p-conn-status').innerText = "Device disconnected.";
+                    document.getElementById('p2p-conn-status').style.color = "#ff6b6b";
+                    document.getElementById('p2p-send-controls').style.display = 'none';
+                });
+            });
+            peerInstance.on('error', (err) => {
+                showStatus('p2p-status', '✗ Connection error: ' + err.type + '. Check your network and try again.', 'error');
+                btn.innerHTML = 'Generate QR Code Link'; btn.disabled = false; btn.style.display = 'block';
             });
         }
         async function sendP2PFile() {
             const file = document.getElementById('p2p-file').files[0];
-            if (!file || !activeConnection) return;
-            activeConnection.send({ file: await file.arrayBuffer(), name: file.name });
-            showStatus('p2p-status', '✓ File sent successfully to connected device!', 'success');
+            if (!file) { showStatus('p2p-status', 'Choose a file first.', 'error'); return; }
+            if (!activeConnection || !activeConnection.open) { showStatus('p2p-status', 'No device connected yet — scan the QR code from the other device first.', 'error'); return; }
+            try {
+                showStatus('p2p-status', 'Sending file…', 'info');
+                activeConnection.send({ file: await file.arrayBuffer(), name: file.name });
+                showStatus('p2p-status', '✓ File sent successfully to connected device!', 'success');
+            } catch(err) {
+                showStatus('p2p-status', '✗ Transfer failed: ' + err.message, 'error');
+            }
         }
 
         // PWA Service Worker Registration
