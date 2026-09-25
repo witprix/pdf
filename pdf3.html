@@ -929,7 +929,8 @@
             <div id="removepw-info"></div>
             <div class="option-group">
                 <label>Password:</label>
-                <input type="password" id="removepw-password" placeholder="Leave blank if only print restricted">
+                <input type="password" id="removepw-password" placeholder="Leave blank if only print restricted" autocomplete="new-password" name="pdf-unlock-pw-not-a-login">
+                <small style="display:block; margin-top:-6px; margin-bottom:10px;">This is the PDF's own password, entered locally — nothing is sent anywhere or saved.</small>
             </div>
             <div class="action-buttons">
                 <button class="btn btn-primary" onclick="removePasswordFromPDF()" id="removepw-btn" disabled>Preview Unlock</button>
@@ -1008,6 +1009,13 @@
                 if (localStorage.getItem('pdftk-theme') === 'dark') document.body.setAttribute('data-theme', 'dark');
             } catch(e) {}
         })();
+
+        // Some browsers ignore autocomplete="new-password" and autofill this field anyway
+        // since it's the only type="password" input on the page. Force it empty on load.
+        window.addEventListener('load', () => {
+            const pwField = document.getElementById('removepw-password');
+            if (pwField) setTimeout(() => { pwField.value = ''; }, 50);
+        });
 
         function showStatus(elementId, message, type) {
             const status = document.getElementById(elementId);
