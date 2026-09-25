@@ -1751,14 +1751,30 @@
         }
 
         let pwFile = null;
-        function handleRemovePasswordFile(e) { pwFile = e.target.files[0]; document.getElementById('removepw-btn').disabled=false; }
-        function clearRemovePasswordFile() { pwFile=null; document.getElementById('removepw-file').value=''; document.getElementById('removepw-btn').disabled=true; }
+        function handleRemovePasswordFile(e) {
+            const f = e.target.files[0];
+            document.getElementById('removepw-status').style.display = 'none';
+            if (!f) { pwFile = null; document.getElementById('removepw-btn').disabled = true; return; }
+            if (f.size === 0) {
+                pwFile = null;
+                document.getElementById('removepw-file').value = '';
+                document.getElementById('removepw-btn').disabled = true;
+                showStatus('removepw-status', `✗ "${f.name}" is empty (0 KB) — choose a valid PDF file.`, 'error');
+                return;
+            }
+            pwFile = f;
+            document.getElementById('removepw-btn').disabled = false;
+        }
+        function clearRemovePasswordFile() { pwFile=null; document.getElementById('removepw-file').value=''; document.getElementById('removepw-btn').disabled=true; document.getElementById('removepw-password').value=''; document.getElementById('removepw-status').style.display='none'; }
         async function removePasswordFromPDF() {
             if(!pwFile) return; const pw = document.getElementById('removepw-password').value;
             const btn = document.getElementById('removepw-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
             try {
                 const pdf = await pdfjsLib.getDocument({data: await pwFile.arrayBuffer(), password: pw}).promise;
+                if (!pdf.numPages || pdf.numPages < 1) {
+                    throw new Error('The file has no readable pages — it may be corrupted or not a valid PDF.');
+                }
                 const d = await PDFLib.PDFDocument.create();
                 for(let i=1; i<=pdf.numPages; i++) {
                     const p = await pdf.getPage(i); const v = p.getViewport({scale:2}); const c = document.createElement('canvas'); c.width=v.width; c.height=v.height;
@@ -1767,8 +1783,20 @@
                     const img = await d.embedJpg(imgBytes);
                     d.addPage([v.width/2, v.height/2]).drawImage(img, {x:0, y:0, width:v.width/2, height:v.height/2});
                 }
-                showGlobalPreview(await d.save(), 'unlocked.pdf');
-            } catch(e) { showStatus('removepw-status', 'Incorrect Password or Error.', 'error'); }
+                const outBytes = await d.save();
+                if (!outBytes || outBytes.length < 100) {
+                    throw new Error('Generated file came out empty — the source PDF may be corrupted.');
+                }
+                showGlobalPreview(outBytes, 'unlocked.pdf');
+            } catch(e) {
+                let msg = 'Error: ' + e.message;
+                if (e.name === 'PasswordException') {
+                    msg = (e.code === 1) ? 'This PDF needs a password — enter it above and try again.' : 'Incorrect password — please check it and try again.';
+                } else if (e.name === 'InvalidPDFException') {
+                    msg = 'This file is not a valid or readable PDF (it may be corrupted or 0 KB).';
+                }
+                showStatus('removepw-status', '✗ ' + msg, 'error');
+            }
             btn.innerHTML = 'Preview Unlock'; btn.disabled = false;
         }
 
