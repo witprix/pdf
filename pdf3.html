@@ -569,6 +569,25 @@
                 <small>Select multiple PDF files</small>
                 <input type="file" id="merge-files" multiple accept=".pdf" onchange="handleMergeFiles(event)">
             </div>
+            <div style="margin:14px 0; display:flex; flex-wrap:wrap; gap:16px; align-items:center;">
+                <label style="display:flex; align-items:center; gap:8px; font-weight:600; margin:0;">
+                    Order files by:
+                    <select id="merge-sort-mode" onchange="resortMergeFiles()" style="width:auto; margin:0;">
+                        <option value="auto-date">Auto-detect date in filename (e.g. payslips)</option>
+                        <option value="upload">Keep upload order</option>
+                        <option value="az">Filename A → Z</option>
+                    </select>
+                </label>
+            </div>
+            <label style="display:flex; align-items:center; gap:8px; font-weight:600; margin:0 0 8px;">
+                <input type="checkbox" id="merge-pw-protected" onchange="toggleMergePwField()" style="width:auto;">
+                These PDFs are password-protected
+            </label>
+            <div id="merge-pw-field" style="display:none; margin-bottom:14px;">
+                <input type="password" id="merge-password" placeholder="Password (tried on every file)" autocomplete="new-password" name="pdf-merge-pw-not-a-login">
+                <small style="display:block; margin-top:-6px;">Used only in your browser to open each file locally, then discarded — nothing is uploaded. If files use different passwords, unlock them individually first (Unlock tab), then merge.</small>
+                <small style="display:block; color:#c0392b;">Note: merging password-protected files rasterizes each page to an image to remove the password, so the merged PDF's text won't be selectable/searchable (same trade-off as the Unlock tool).</small>
+            </div>
             <div class="file-list" id="merge-list"></div>
             <div class="action-buttons">
                 <button class="btn btn-primary" onclick="mergePDFs()" id="merge-btn" disabled>Preview & Merge</button>
@@ -1493,34 +1512,127 @@
         // ----------------------------------------------------
         
         let mergeFiles = [];
+
+        // Parses filenames like "52093748_AUG_2023_PaySlip.pdf" into a sortable
+        // YYYYMM key so payslips merge in chronological order, not alphabetical
+        // order (which would wrongly group APR_2023..APR_2026 before AUG_2022).
+        const MONTH_MAP = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, sept:9, oct:10, nov:11, dec:12,
+            january:1, february:2, march:3, april:4, june:6, july:7, august:8, september:9, october:10, november:11, december:12 };
+        function smartDateKey(filename) {
+            const base = filename.replace(/\.[a-z0-9]+$/i, '');
+            // Split on any non-alphanumeric separator into tokens, e.g. "52093748_AUG_2023_PaySlip" -> ["52093748","AUG","2023","PaySlip"]
+            const tokens = base.split(/[^A-Za-z0-9]+/).filter(Boolean);
+            const monthRegex = /^(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)$/i;
+            const yearTokenRegex = /^(19|20)\d{2}$/;
+            for (let i = 0; i < tokens.length; i++) {
+                if (!monthRegex.test(tokens[i])) continue;
+                const month = MONTH_MAP[tokens[i].toLowerCase()];
+                if (!month) continue;
+                // A year must sit immediately before or after the month token — this avoids
+                // false hits on 4-digit runs buried inside longer ID numbers elsewhere in the name.
+                const before = tokens[i-1], after = tokens[i+1];
+                let year = null;
+                if (after && yearTokenRegex.test(after)) year = parseInt(after, 10);
+                else if (before && yearTokenRegex.test(before)) year = parseInt(before, 10);
+                if (year) return year * 100 + month;
+            }
+            return null; // couldn't detect a date — caller falls back to filename order
+        }
+        function sortMergeFiles(mode) {
+            if (mode === 'az') {
+                mergeFiles.sort((a, b) => a.name.localeCompare(b.name));
+            } else if (mode === 'auto-date') {
+                const undated = [];
+                const dated = [];
+                mergeFiles.forEach(f => { const k = smartDateKey(f.name); if (k === null) undated.push(f); else dated.push({f, k}); });
+                dated.sort((a, b) => a.k - b.k);
+                mergeFiles = [...dated.map(x => x.f), ...undated.sort((a,b)=>a.name.localeCompare(b.name))];
+                if (undated.length > 0 && dated.length > 0) {
+                    showStatus('merge-status', `Couldn't detect a date in ${undated.length} filename(s) — those were placed at the end, A→Z. Detected dates for the other ${dated.length}.`, 'info');
+                }
+            }
+            // 'upload' mode: leave as-is
+        }
+        function renderMergeList() {
+            const l = document.getElementById('merge-list'); l.innerHTML = '';
+            mergeFiles.forEach((f, i) => {
+                const key = smartDateKey(f.name);
+                const dateTag = key ? ` <span style="color:#888; font-weight:normal;">(${String(key % 100).padStart(2,'0')}/${Math.floor(key/100)})</span>` : '';
+                l.innerHTML += `<div class="file-item"><span>${i+1}. ${f.name}${dateTag}</span><button class="btn-remove" onclick="removeMergeFile(${i})">X</button></div>`;
+            });
+        }
+        function resortMergeFiles() {
+            sortMergeFiles(document.getElementById('merge-sort-mode').value);
+            renderMergeList();
+        }
+        function toggleMergePwField() {
+            document.getElementById('merge-pw-field').style.display = document.getElementById('merge-pw-protected').checked ? 'block' : 'none';
+        }
         function handleMergeFiles(e) {
             mergeFiles = [...mergeFiles, ...Array.from(e.target.files)];
-            const l = document.getElementById('merge-list'); l.innerHTML = '';
-            mergeFiles.forEach((f, i) => l.innerHTML += `<div class="file-item"><span>${i+1}. ${f.name}</span><button class="btn-remove" onclick="removeMergeFile(${i})">X</button></div>`);
+            document.getElementById('merge-status').style.display = 'none';
+            sortMergeFiles(document.getElementById('merge-sort-mode').value); // may set an info status about undated files
+            renderMergeList();
             document.getElementById('merge-btn').disabled = mergeFiles.length < 2;
             if (mergeFiles.length === 1) {
                 showStatus('merge-status', 'Add at least one more PDF — merging needs 2 or more files.', 'info');
-            } else {
-                document.getElementById('merge-status').style.display = 'none';
             }
         }
-        function removeMergeFile(i) { mergeFiles.splice(i, 1); handleMergeFiles({target:{files:[]}}); }
-        function clearMergeFiles() { mergeFiles = []; document.getElementById('merge-list').innerHTML=''; document.getElementById('merge-btn').disabled=true; document.getElementById('merge-status').style.display='none'; }
+        function removeMergeFile(i) { mergeFiles.splice(i, 1); renderMergeList(); document.getElementById('merge-btn').disabled = mergeFiles.length < 2; }
+        function clearMergeFiles() { mergeFiles = []; document.getElementById('merge-list').innerHTML=''; document.getElementById('merge-btn').disabled=true; document.getElementById('merge-status').style.display='none'; document.getElementById('merge-files').value=''; }
         async function mergePDFs() {
             const btn = document.getElementById('merge-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
+            const pwProtected = document.getElementById('merge-pw-protected').checked;
+            const pw = document.getElementById('merge-password').value;
             try {
                 const doc = await PDFLib.PDFDocument.create();
+                let fileNum = 0;
                 for (const f of mergeFiles) {
-                    try {
-                        const p = await PDFLib.PDFDocument.load(await f.arrayBuffer(), { ignoreEncryption: true });
-                        const cp = await doc.copyPages(p, p.getPageIndices());
-                        cp.forEach(pg => doc.addPage(pg));
-                    } catch(inner) {
-                        throw new Error(`Could not read "${f.name}" — it may be corrupted or password protected.`);
+                    fileNum++;
+                    showStatus('merge-status', `Processing ${fileNum}/${mergeFiles.length}: ${f.name}...`, 'info');
+                    await yieldToUI();
+                    if (pwProtected) {
+                        // pdf-lib cannot decrypt a PDF that genuinely requires a password to
+                        // open. pdf.js can, so we decode each page with the given password
+                        // and rasterize it into the merged document — same technique as the
+                        // Unlock tool. This trades away selectable text for the ability to
+                        // combine password-protected files at all.
+                        let pdf;
+                        try {
+                            pdf = await pdfjsLib.getDocument({data: await f.arrayBuffer(), password: pw}).promise;
+                        } catch(inner) {
+                            const isPwIssue = inner.name === 'PasswordException';
+                            throw new Error(isPwIssue
+                                ? `"${f.name}" didn't accept that password. Stopped before merging any further — check the password and try again.`
+                                : `Could not read "${f.name}" — it may be corrupted: ${inner.message}`);
+                        }
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const p = await pdf.getPage(i);
+                            const v = p.getViewport({scale: 2});
+                            const c = document.createElement('canvas'); c.width = v.width; c.height = v.height;
+                            await p.render({canvasContext: c.getContext('2d'), viewport: v}).promise;
+                            const imgBytes = dataURLToBytes(c.toDataURL('image/jpeg'));
+                            const img = await doc.embedJpg(imgBytes);
+                            doc.addPage([v.width/2, v.height/2]).drawImage(img, {x:0, y:0, width:v.width/2, height:v.height/2});
+                            await yieldToUI();
+                        }
+                    } else {
+                        try {
+                            const p = await PDFLib.PDFDocument.load(await f.arrayBuffer(), { ignoreEncryption: true });
+                            const cp = await doc.copyPages(p, p.getPageIndices());
+                            cp.forEach(pg => doc.addPage(pg));
+                        } catch(inner) {
+                            throw new Error(`Could not read "${f.name}" — it may be corrupted or password protected. If it needs a password to open, check "These PDFs are password-protected" above.`);
+                        }
                     }
                 }
-                showGlobalPreview(await doc.save(), 'merged.pdf');
+                const outBytes = await doc.save();
+                if (!outBytes || outBytes.length < 100) {
+                    throw new Error('Generated file came out empty — one of the source PDFs may be corrupted.');
+                }
+                showStatus('merge-status', '', 'info'); document.getElementById('merge-status').style.display = 'none';
+                showGlobalPreview(outBytes, 'merged.pdf');
             } catch(e) {
                 showStatus('merge-status', '✗ ' + e.message, 'error');
             }
