@@ -535,6 +535,31 @@
         </div>
     </div>
 
+    <!-- DEBUG LOG OVERLAY -->
+    <div id="debug-log-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:white; border-radius:12px; max-width:800px; width:100%; max-height:85vh; display:flex; flex-direction:column; padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h2 style="margin:0; font-size:1.2em;">🐛 Debug Log</h2>
+                <button class="btn btn-secondary" onclick="closeDebugLog()" style="padding:5px 12px;">✕</button>
+            </div>
+            <p style="font-size:13px; color:#666; margin:0 0 10px;">This stays on your device — nothing here is sent anywhere automatically. Copy or download it, then paste/attach it in chat.</p>
+            <textarea id="debug-log-text" readonly style="flex:1; min-height:300px; font-family:monospace; font-size:12px; white-space:pre; resize:vertical;"></textarea>
+            <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center;">
+                <button class="btn btn-primary" onclick="copyDebugLog()">Copy to Clipboard</button>
+                <button class="btn btn-secondary" onclick="downloadDebugLog()">Download as .txt</button>
+                <button class="btn btn-secondary" onclick="refreshDebugLog()">Refresh</button>
+                <button class="btn btn-secondary" onclick="clearDebugLog()">Clear Log</button>
+                <span id="debug-log-copy-status" style="font-size:13px; color:#28a745;"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fixed corner button to open the debug log from anywhere in the app -->
+    <button onclick="openDebugLog()" title="Open debug log"
+        style="position:fixed; bottom:18px; right:18px; z-index:9998; background:#333; color:white; border:none; border-radius:24px; padding:10px 16px; font-size:13px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+        🐛 Debug Log (<span id="debug-log-count">0</span>)
+    </button>
+
     <div class="container">
         <div class="header">
             <h1>📄 PDF Toolkit</h1>
@@ -1004,6 +1029,52 @@
         }
 
         // ----------------------------------------------------
+        // DEBUG LOG — captures errors and key actions so they can be
+        // copied and shared for troubleshooting instead of guessing blind.
+        // ----------------------------------------------------
+        const BUILD_STAMP = 'Build: 2026-09-26-rev6';
+        const debugLog = [];
+        function logDebug(msg) {
+            const line = `[${new Date().toISOString().split('T')[1].replace('Z','')}] ${msg}`;
+            debugLog.push(line);
+            if (debugLog.length > 500) debugLog.shift(); // keep the log bounded
+            const countEl = document.getElementById('debug-log-count');
+            if (countEl) countEl.innerText = debugLog.length;
+        }
+        logDebug(`App loaded. ${BUILD_STAMP}. UA: ${navigator.userAgent}`);
+        window.addEventListener('error', (e) => {
+            logDebug(`UNCAUGHT ERROR: ${e.message} (${e.filename ? e.filename.split('/').pop() : '?'}:${e.lineno})`);
+        });
+        window.addEventListener('unhandledrejection', (e) => {
+            logDebug(`UNHANDLED PROMISE REJECTION: ${e.reason && e.reason.message ? e.reason.message : e.reason}`);
+        });
+        function openDebugLog() {
+            document.getElementById('debug-log-text').value = debugLog.join('\n');
+            document.getElementById('debug-log-overlay').style.display = 'flex';
+        }
+        function closeDebugLog() { document.getElementById('debug-log-overlay').style.display = 'none'; }
+        function refreshDebugLog() { document.getElementById('debug-log-text').value = debugLog.join('\n'); }
+        async function copyDebugLog() {
+            refreshDebugLog();
+            const text = document.getElementById('debug-log-text').value;
+            try {
+                await navigator.clipboard.writeText(text);
+                document.getElementById('debug-log-copy-status').innerText = '✓ Copied to clipboard!';
+            } catch(e) {
+                document.getElementById('debug-log-text').select();
+                document.getElementById('debug-log-copy-status').innerText = 'Could not auto-copy — text is selected, press Ctrl/Cmd+C.';
+            }
+        }
+        function downloadDebugLog() {
+            refreshDebugLog();
+            const blob = new Blob([document.getElementById('debug-log-text').value], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = 'pdf-toolkit-debug-log.txt'; a.click();
+            URL.revokeObjectURL(url);
+        }
+        function clearDebugLog() { debugLog.length = 0; logDebug('Log cleared by user.'); refreshDebugLog(); }
+
+        // ----------------------------------------------------
         // UTILITY FUNCTIONS
         // ----------------------------------------------------
         function switchTab(tabName, evt) {
@@ -1041,6 +1112,7 @@
             status.className = `status ${type}`;
             status.innerHTML = message;
             status.style.display = 'block';
+            logDebug(`STATUS [${elementId}] (${type}): ${message.replace(/<[^>]+>/g, '')}`);
             // With long file/page lists (e.g. merging 50+ payslips), the status line can end up
             // far below the fold and get missed entirely. Scroll it into view for errors (most
             // important) and one-off info notices, but not routine per-file progress ticks —
@@ -1051,7 +1123,9 @@
         }
 
         function downloadPDF(pdfBytes, filename) {
+            logDebug(`downloadPDF called: filename=${filename}, byteLength=${pdfBytes ? pdfBytes.length : 'null'}`);
             const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            logDebug(`Blob created: size=${blob.size} bytes`);
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -1071,6 +1145,7 @@
         let gpCurrentPage = 1;
 
         async function showGlobalPreview(pdfBytes, filename) {
+            logDebug(`showGlobalPreview called: filename=${filename}, byteLength=${pdfBytes ? pdfBytes.length : 'null'}`);
             gpPdfBytes = pdfBytes;
             gpFilename = filename;
             gpCurrentPage = 1;
@@ -1089,8 +1164,10 @@
                 // Always hand pdf.js an independent copy and keep gpPdfBytes intact.
                 const previewCopy = pdfBytes.slice(0);
                 gpPdfDoc = await pdfjsLib.getDocument({data: previewCopy}).promise;
+                logDebug(`Preview parsed OK: ${gpPdfDoc.numPages} pages. gpPdfBytes still intact: byteLength=${gpPdfBytes.length}`);
                 renderGpPage(gpCurrentPage);
             } catch(e) {
+                logDebug(`Preview render FAILED: ${e.message}. Falling back to direct download.`);
                 console.error("Preview render error:", e);
                 executeGlobalDownload();
             }
@@ -1133,8 +1210,11 @@
         }
 
         function executeGlobalDownload() {
+            logDebug(`executeGlobalDownload called: gpPdfBytes byteLength=${gpPdfBytes ? gpPdfBytes.length : 'null'}, filename=${gpFilename}`);
             if (gpPdfBytes && gpFilename) {
                 downloadPDF(gpPdfBytes, gpFilename);
+            } else {
+                logDebug('executeGlobalDownload: SKIPPED download — gpPdfBytes or gpFilename was empty/null.');
             }
             closeGlobalPreview();
         }
@@ -1588,6 +1668,7 @@
         function removeMergeFile(i) { mergeFiles.splice(i, 1); renderMergeList(); document.getElementById('merge-btn').disabled = mergeFiles.length < 2; }
         function clearMergeFiles() { mergeFiles = []; document.getElementById('merge-list').innerHTML=''; document.getElementById('merge-btn').disabled=true; document.getElementById('merge-status').style.display='none'; document.getElementById('merge-files').value=''; }
         async function mergePDFs() {
+            logDebug(`mergePDFs started: ${mergeFiles.length} files, pwProtected checkbox=${document.getElementById('merge-pw-protected') ? document.getElementById('merge-pw-protected').checked : 'ELEMENT NOT FOUND'}`);
             const btn = document.getElementById('merge-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
             const pwProtected = document.getElementById('merge-pw-protected').checked;
@@ -1640,6 +1721,7 @@
                     }
                 }
                 const outBytes = await doc.save();
+                logDebug(`mergePDFs finished building doc. outBytes byteLength=${outBytes ? outBytes.length : 'null'}`);
                 if (!outBytes || outBytes.length < 100) {
                     throw new Error('Generated file came out empty — one of the source PDFs may be corrupted.');
                 }
@@ -1916,6 +1998,7 @@
         function clearRemovePasswordFile() { pwFile=null; document.getElementById('removepw-file').value=''; document.getElementById('removepw-btn').disabled=true; document.getElementById('removepw-password').value=''; document.getElementById('removepw-status').style.display='none'; }
         async function removePasswordFromPDF() {
             if(!pwFile) return; const pw = document.getElementById('removepw-password').value;
+            logDebug(`removePasswordFromPDF started: file=${pwFile.name}, size=${pwFile.size} bytes, password provided=${pw.length > 0}`);
             const btn = document.getElementById('removepw-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
             try {
@@ -2186,7 +2269,7 @@
         }
     </script>
     <div style="text-align:center; font-size:11px; color:#999; padding:10px 8px 16px;">
-        Build: 2026-09-26-rev5 &middot; If you're troubleshooting an issue with me, please tell me the build shown here so we know you're testing the latest file.
+        Build: 2026-09-26-rev6 &middot; If you're troubleshooting an issue with me, please tell me the build shown here so we know you're testing the latest file.
     </div>
 </body>
 </html>
