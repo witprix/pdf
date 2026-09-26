@@ -1056,7 +1056,13 @@
                 if (gpPdfDoc) {
                     try { gpPdfDoc.destroy(); } catch(e){}
                 }
-                gpPdfDoc = await pdfjsLib.getDocument({data: pdfBytes}).promise;
+                // IMPORTANT: pdf.js transfers (detaches) the ArrayBuffer backing whatever
+                // TypedArray it's given to its worker for zero-copy loading. Since gpPdfBytes
+                // and this preview call would otherwise share the same buffer, rendering the
+                // preview would silently empty out the exact bytes we intend to download.
+                // Always hand pdf.js an independent copy and keep gpPdfBytes intact.
+                const previewCopy = pdfBytes.slice(0);
+                gpPdfDoc = await pdfjsLib.getDocument({data: previewCopy}).promise;
                 renderGpPage(gpCurrentPage);
             } catch(e) {
                 console.error("Preview render error:", e);
@@ -1487,9 +1493,19 @@
         // ----------------------------------------------------
         
         let mergeFiles = [];
-        function handleMergeFiles(e) { mergeFiles = [...mergeFiles, ...Array.from(e.target.files)]; const l = document.getElementById('merge-list'); l.innerHTML = ''; mergeFiles.forEach((f, i) => l.innerHTML += `<div class="file-item"><span>${i+1}. ${f.name}</span><button class="btn-remove" onclick="removeMergeFile(${i})">X</button></div>`); document.getElementById('merge-btn').disabled = mergeFiles.length < 2; }
+        function handleMergeFiles(e) {
+            mergeFiles = [...mergeFiles, ...Array.from(e.target.files)];
+            const l = document.getElementById('merge-list'); l.innerHTML = '';
+            mergeFiles.forEach((f, i) => l.innerHTML += `<div class="file-item"><span>${i+1}. ${f.name}</span><button class="btn-remove" onclick="removeMergeFile(${i})">X</button></div>`);
+            document.getElementById('merge-btn').disabled = mergeFiles.length < 2;
+            if (mergeFiles.length === 1) {
+                showStatus('merge-status', 'Add at least one more PDF — merging needs 2 or more files.', 'info');
+            } else {
+                document.getElementById('merge-status').style.display = 'none';
+            }
+        }
         function removeMergeFile(i) { mergeFiles.splice(i, 1); handleMergeFiles({target:{files:[]}}); }
-        function clearMergeFiles() { mergeFiles = []; document.getElementById('merge-list').innerHTML=''; document.getElementById('merge-btn').disabled=true; }
+        function clearMergeFiles() { mergeFiles = []; document.getElementById('merge-list').innerHTML=''; document.getElementById('merge-btn').disabled=true; document.getElementById('merge-status').style.display='none'; }
         async function mergePDFs() {
             const btn = document.getElementById('merge-btn'); btn.innerHTML = '<span class="loading"></span> Processing...'; btn.disabled = true;
             await yieldToUI();
