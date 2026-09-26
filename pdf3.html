@@ -1041,6 +1041,13 @@
             status.className = `status ${type}`;
             status.innerHTML = message;
             status.style.display = 'block';
+            // With long file/page lists (e.g. merging 50+ payslips), the status line can end up
+            // far below the fold and get missed entirely. Scroll it into view for errors (most
+            // important) and one-off info notices, but not routine per-file progress ticks —
+            // those would otherwise yank the screen on every iteration of a big batch.
+            if (type === 'error' || type === 'success') {
+                status.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
         }
 
         function downloadPDF(pdfBytes, filename) {
@@ -1608,13 +1615,18 @@
                                 : `Could not read "${f.name}" — it may be corrupted: ${inner.message}`);
                         }
                         for (let i = 1; i <= pdf.numPages; i++) {
-                            const p = await pdf.getPage(i);
-                            const v = p.getViewport({scale: 2});
-                            const c = document.createElement('canvas'); c.width = v.width; c.height = v.height;
-                            await p.render({canvasContext: c.getContext('2d'), viewport: v}).promise;
-                            const imgBytes = dataURLToBytes(c.toDataURL('image/jpeg'));
-                            const img = await doc.embedJpg(imgBytes);
-                            doc.addPage([v.width/2, v.height/2]).drawImage(img, {x:0, y:0, width:v.width/2, height:v.height/2});
+                            showStatus('merge-status', `Processing ${fileNum}/${mergeFiles.length}: ${f.name} (page ${i}/${pdf.numPages})...`, 'info');
+                            try {
+                                const p = await pdf.getPage(i);
+                                const v = p.getViewport({scale: 2});
+                                const c = document.createElement('canvas'); c.width = v.width; c.height = v.height;
+                                await p.render({canvasContext: c.getContext('2d'), viewport: v}).promise;
+                                const imgBytes = dataURLToBytes(c.toDataURL('image/jpeg'));
+                                const img = await doc.embedJpg(imgBytes);
+                                doc.addPage([v.width/2, v.height/2]).drawImage(img, {x:0, y:0, width:v.width/2, height:v.height/2});
+                            } catch(pageErr) {
+                                throw new Error(`Failed on page ${i} of "${f.name}": ${pageErr.message}`);
+                            }
                             await yieldToUI();
                         }
                     } else {
